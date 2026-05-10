@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "Tab Mission Control",
+  "short_name": "Tab MC",
+  "version": "1.0.0",
+  "description": "Take command of your browser tabs. Organize by domain, search instantly, hibernate inactive tabs, and save sessions — all from your new tab page.",
+  "permissions": ["tabs", "windows", "storage", "idle", "alarms", "tabGroups"],
+  "minimum_chrome_version": "116",
+  "background": {
+    "service_worker": "src/background/service-worker.ts",
+    "type": "module"
+  },
+  "chrome_url_overrides": {
+    "newtab": "src/newtab/index.html"
+  },
+  "action": {
+    "default_title": "Tab Mission Control"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
