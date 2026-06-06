@@ -15,7 +15,7 @@ import Settings from "./components/Settings";
 import Tooltip from "./components/Tooltip";
 
 // Swap this one-liner anytime — it shows in the footer next to the credit.
-const FOOTER_TAGLINE = "For people who've never closed a tab in their life.";
+const FOOTER_TAGLINE = "Rescuing your RAM, one tab at a time.";
 
 export default function App() {
   useTabs();
