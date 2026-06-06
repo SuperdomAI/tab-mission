@@ -1,7 +1,9 @@
 import type { EnrichedTab } from "../types/index";
 
 export const OLLAMA_BASE = "http://localhost:11434";
-const ORIGIN = "http://localhost:11434/*";
+// Chrome match patterns must NOT include a port — request host-wide access.
+// (The CSP connect-src, which is separate, keeps the explicit :11434 entries.)
+const ORIGINS = ["http://localhost/*", "http://127.0.0.1/*"];
 
 export interface ChatMessage {
   role: "system" | "user" | "assistant";
@@ -15,8 +17,8 @@ export async function ensureOllamaPermission(): Promise<boolean> {
   try {
     const perms = (globalThis as { chrome?: typeof chrome }).chrome?.permissions;
     if (!perms) return true; // non-extension context (tests)
-    if (await perms.contains({ origins: [ORIGIN] })) return true;
-    return await perms.request({ origins: [ORIGIN] });
+    if (await perms.contains({ origins: ORIGINS })) return true;
+    return await perms.request({ origins: ORIGINS });
   } catch {
     return false;
   }

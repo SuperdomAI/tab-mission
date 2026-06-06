@@ -1,7 +1,7 @@
 import React, { useState, useTransition } from "react";
 import { useTabStore } from "../../store/tabStore";
 import type { AppSettings } from "../../types/index";
-import { ensureOllamaPermission, detectOllama } from "../../lib/ollama";
+import { ensureOllamaPermission, detectOllama, listModels } from "../../lib/ollama";
 import Switch from "./Switch";
 
 interface SettingsProps {
@@ -33,11 +33,22 @@ export default function Settings({ open, onClose }: SettingsProps) {
     }
     setAiStatus("Checking for Ollama…");
     const up = await detectOllama();
-    setAiStatus(
-      up
-        ? "Connected to local Ollama ✓"
-        : "Not detected. Start Ollama with OLLAMA_ORIGINS allowing this extension (see below).",
-    );
+    if (!up) {
+      setAiStatus(
+        "Not detected. Start Ollama with OLLAMA_ORIGINS allowing this extension (see below).",
+      );
+      return;
+    }
+    const models = await listModels();
+    if (models.length > 0 && !models.includes(local.ollamaModel)) {
+      // auto-pick an installed model (e.g. you have "mistral", default was "llama3.2")
+      update("ollamaModel", models[0]);
+      setAiStatus(`Connected ✓ — using ${models[0]}`);
+    } else {
+      setAiStatus(
+        `Connected ✓${local.ollamaModel ? ` — using ${local.ollamaModel}` : ""}`,
+      );
+    }
   }
 
   React.useEffect(() => {

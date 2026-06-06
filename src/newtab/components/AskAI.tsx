@@ -29,13 +29,18 @@ export default function AskAI({ open, onClose }: { open: boolean; onClose: () =>
     setInput("");
     setBusy(true);
     try {
-      await ensureOllamaPermission();
+      const granted = await ensureOllamaPermission();
+      if (!granted) throw new Error("permission to reach localhost was denied");
       const reply = await chat([system, ...next], settings.ollamaModel);
       setMessages([...next, { role: "assistant", content: reply }]);
-    } catch {
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      const hint = /404/.test(msg)
+        ? `Model "${settings.ollamaModel}" not found. Set an installed model in Settings → Local AI.`
+        : "Is Ollama running? Start it with OLLAMA_ORIGINS allowing this extension (Settings → Local AI).";
       setMessages([
         ...next,
-        { role: "assistant", content: "(Ollama unavailable — check Settings → Local AI.)" },
+        { role: "assistant", content: `Couldn't reach the model (${msg}). ${hint}` },
       ]);
     }
     setBusy(false);
