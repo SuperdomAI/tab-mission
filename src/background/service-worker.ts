@@ -1,5 +1,67 @@
 import type { EnrichedTab, DailyAnalytics, SavedSession } from "../types/index";
 
+// ─── Ollama CORS: strip the Origin header for localhost:11434 ────────────────
+// Chrome attaches `Origin: chrome-extension://<id>` to extension requests, and
+// Ollama's CORS gate 403s any origin not in OLLAMA_ORIGINS. Removing the Origin
+// header makes Ollama treat it as a normal (non-browser) request — so it works
+// regardless of which Ollama instance / origins config is running. Scoped to
+// localhost; only active where we hold the optional host permission.
+const OLLAMA_DNR_RULE_ID = 4711;
+async function setupOllamaCors() {
+  try {
+    await chrome.declarativeNetRequest.updateDynamicRules({
+      removeRuleIds: [OLLAMA_DNR_RULE_ID],
+      addRules: [
+        {
+          id: OLLAMA_DNR_RULE_ID,
+          priority: 1,
+          action: {
+            type: chrome.declarativeNetRequest.RuleActionType.MODIFY_HEADERS,
+            requestHeaders: [
+              {
+                header: "Origin",
+                operation: chrome.declarativeNetRequest.HeaderOperation.REMOVE,
+              },
+            ],
+          },
+          condition: {
+            requestDomains: ["localhost", "127.0.0.1"],
+            resourceTypes: [
+              chrome.declarativeNetRequest.ResourceType.XMLHTTPREQUEST,
+            ],
+          },
+        },
+      ],
+    });
+  } catch (e) {
+    console.error("[TMC] Ollama CORS rule setup error:", e);
+  }
+}
+setupOllamaCors();
+
+// ─── Ollama proxy (optional local AI) ────────────────────────────────────────
+// The page client proxies fetches through here so the response is readable
+// without page-context CORS; combined with the Origin-strip rule above, calls
+// to a local Ollama succeed. Requires the optional localhost host permission.
+chrome.runtime.onMessage.addListener(
+  (msg: { type?: string; path?: string; init?: { method?: string; body?: string } }, _sender, sendResponse) => {
+    if (msg?.type !== "ollama-fetch") return;
+    (async () => {
+      try {
+        const r = await fetch(`http://localhost:11434${msg.path ?? ""}`, {
+          method: msg.init?.method ?? "GET",
+          headers: msg.init?.body ? { "Content-Type": "application/json" } : undefined,
+          body: msg.init?.body,
+        });
+        sendResponse({ ok: r.ok, status: r.status, body: await r.text() });
+      } catch (e) {
+        sendResponse({ ok: false, status: 0, body: String(e) });
+      }
+    })();
+    return true; // keep the message channel open for the async response
+  },
+);
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function extractDomain(url: string): string {
@@ -277,8 +339,10 @@ chrome.windows.onRemoved.addListener(async (windowId) => {
     const windowTabs = tabs.filter((t) => t.windowId === windowId);
     if (windowTabs.length === 0) return;
 
-    const result = await chrome.storage.local.get("sessions");
-    const sessions: SavedSession[] = result.sessions || [];
+    const result = (await chrome.storage.local.get("sessions")) as {
+      sessions?: SavedSession[];
+    };
+    const sessions: SavedSession[] = result.sessions ?? [];
     const newSession: SavedSession = {
       id: `auto-${Date.now()}`,
       name: `Auto-save: ${new Date().toLocaleString()}`,

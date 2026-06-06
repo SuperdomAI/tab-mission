@@ -1,6 +1,8 @@
 import React, { useState, useTransition } from "react";
 import { useTabStore } from "../../store/tabStore";
 import type { AppSettings } from "../../types/index";
+import { ensureOllamaPermission, detectOllama, listModels } from "../../lib/ollama";
+import Switch from "./Switch";
 
 interface SettingsProps {
   open: boolean;
@@ -13,6 +15,41 @@ export default function Settings({ open, onClose }: SettingsProps) {
   const [local, setLocal] = useState<AppSettings>(storeSettings);
   const [isPending, startTransition] = useTransition();
   const [saved, setSaved] = useState(false);
+  const [aiStatus, setAiStatus] = useState("");
+
+  async function toggleOllama() {
+    const next = !local.ollamaEnabled;
+    update("ollamaEnabled", next);
+    if (!next) {
+      setAiStatus("");
+      return;
+    }
+    setAiStatus("Requesting permission…");
+    const granted = await ensureOllamaPermission();
+    if (!granted) {
+      update("ollamaEnabled", false);
+      setAiStatus("Permission denied — AI stays off.");
+      return;
+    }
+    setAiStatus("Checking for Ollama…");
+    const up = await detectOllama();
+    if (!up) {
+      setAiStatus(
+        "Not detected. Start Ollama with OLLAMA_ORIGINS allowing this extension (see below).",
+      );
+      return;
+    }
+    const models = await listModels();
+    if (models.length > 0 && !models.includes(local.ollamaModel)) {
+      // auto-pick an installed model (e.g. you have "mistral", default was "llama3.2")
+      update("ollamaModel", models[0]);
+      setAiStatus(`Connected ✓ — using ${models[0]}`);
+    } else {
+      setAiStatus(
+        `Connected ✓${local.ollamaModel ? ` — using ${local.ollamaModel}` : ""}`,
+      );
+    }
+  }
 
   React.useEffect(() => {
     setLocal(storeSettings);
@@ -159,29 +196,16 @@ export default function Settings({ open, onClose }: SettingsProps) {
               <label className={labelClass + " mb-0"}>
                 Auto-close Unvisited Tabs
               </label>
-              <button
-                onClick={() =>
+              <Switch
+                checked={local.unvisitedAutoCloseEnabled}
+                onChange={() =>
                   update(
                     "unvisitedAutoCloseEnabled",
                     !local.unvisitedAutoCloseEnabled,
                   )
                 }
-                className={`relative w-10 h-5 rounded-full transition-all flex-shrink-0 ${
-                  local.unvisitedAutoCloseEnabled
-                    ? "bg-indigo-600"
-                    : "bg-gray-700"
-                }`}
-                role="switch"
-                aria-checked={local.unvisitedAutoCloseEnabled}
-              >
-                <span
-                  className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${
-                    local.unvisitedAutoCloseEnabled
-                      ? "translate-x-5"
-                      : "translate-x-0.5"
-                  }`}
-                />
-              </button>
+                label="Auto-close unvisited tabs"
+              />
             </div>
             <p className="text-xs text-gray-600">
               Automatically close tabs that were never visited after the
@@ -233,6 +257,45 @@ export default function Settings({ open, onClose }: SettingsProps) {
             <p className="text-xs text-gray-600 mt-1">
               Show a warning badge when you exceed this number of open tabs.
             </p>
+          </div>
+
+          <div className="border-t border-gray-800/60" />
+
+          {/* Local AI (Ollama) — optional */}
+          <div className={sectionClass}>
+            <div className="flex items-center justify-between mb-2">
+              <label className={labelClass + " mb-0"}>Local AI (Ollama)</label>
+              <Switch
+                checked={local.ollamaEnabled}
+                onChange={toggleOllama}
+                label="Local AI (Ollama)"
+              />
+            </div>
+            <p className="text-xs text-gray-600">
+              Optional. Lets the Focus view "Refine with AI" using a local Ollama
+              model. Everything stays on your machine — no cloud, no keys. Core
+              features work without it.
+            </p>
+            {aiStatus && <p className="text-xs text-indigo-400 mt-1.5">{aiStatus}</p>}
+            {local.ollamaEnabled && (
+              <>
+                <div className="mt-2">
+                  <input
+                    type="text"
+                    className={inputClass}
+                    value={local.ollamaModel}
+                    onChange={(e) => update("ollamaModel", e.target.value)}
+                    placeholder="model, e.g. llama3.2"
+                  />
+                </div>
+                <p className="text-xs text-gray-600 mt-1.5">
+                  Ollama must allow this extension's origin. Start it with:
+                  <code className="block mt-1 bg-gray-800/80 rounded px-2 py-1 text-gray-400">
+                    OLLAMA_ORIGINS=chrome-extension://* ollama serve
+                  </code>
+                </p>
+              </>
+            )}
           </div>
         </div>
 

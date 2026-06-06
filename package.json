@@ -1,11 +1,14 @@
 {
   "name": "tab-mission-control",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "A Chrome extension that replaces your new tab page with a clean, powerful tab management dashboard — domain grouping, fuzzy search, session saving, and usage analytics.",
   "type": "module",
   "scripts": {
     "dev": "vite build --watch",
-    "build": "vite build"
+    "build": "vite build",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "typecheck": "tsc --noEmit"
   },
   "keywords": [
     "chrome-extension",
@@ -28,7 +31,9 @@
     "url": "https://github.com/YOUR_USERNAME/tab-mission-control/issues"
   },
   "dependencies": {
+    "cmdk": "^1.1.1",
     "date-fns": "^4.1.0",
+    "framer-motion": "^12.40.0",
     "fuse.js": "^7.3.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
@@ -37,12 +42,17 @@
   "devDependencies": {
     "@crxjs/vite-plugin": "^2.4.0",
     "@tailwindcss/vite": "^4.2.2",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@types/chrome": "^0.1.40",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^4.7.0",
+    "jsdom": "^29.1.1",
     "tailwindcss": "^4.2.2",
     "typescript": "5.7",
-    "vite": "^6.4.2"
+    "vite": "^6.4.2",
+    "vitest": "^3.2.6"
   }
 }

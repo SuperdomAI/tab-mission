@@ -10,8 +10,10 @@ export function useSession() {
 
   async function saveSession(name: string) {
     try {
-      const result = await chrome.storage.local.get('sessions');
-      const existing: SavedSession[] = result.sessions || [];
+      const result = (await chrome.storage.local.get('sessions')) as {
+        sessions?: SavedSession[];
+      };
+      const existing: SavedSession[] = result.sessions ?? [];
       const newSession: SavedSession = {
         id: `session-${Date.now()}`,
         name,
@@ -44,8 +46,10 @@ export function useSession() {
 
   async function deleteSession(sessionId: string) {
     try {
-      const result = await chrome.storage.local.get('sessions');
-      const existing: SavedSession[] = result.sessions || [];
+      const result = (await chrome.storage.local.get('sessions')) as {
+        sessions?: SavedSession[];
+      };
+      const existing: SavedSession[] = result.sessions ?? [];
       const updated = existing.filter((s) => s.id !== sessionId);
       await chrome.storage.local.set({ sessions: updated });
       startTransition(() => setSessions(updated));

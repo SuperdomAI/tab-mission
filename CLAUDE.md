@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A Manifest V3 Chrome extension that **replaces the new tab page** with a tab management dashboard (domain grouping, fuzzy search, session save/restore, usage analytics). React 19 + TypeScript + Vite + Tailwind v4 + Zustand. No backend, no network calls — all data lives in `chrome.storage.*`.
+A Manifest V3 Chrome extension that **replaces the new tab page** with a tab management dashboard. Two views (Stacks decks + Timeline), a ⌘K command palette, session save/restore, usage analytics, and **Workspaces** (Phase 2): type a goal → heuristic relevance (Fuse.js) proposes keep/set-aside → confirm → tabs are snapshotted to a workspace and closed, reversibly. React 19 + TypeScript + Vite + Tailwind v4 + Zustand. No backend; all data lives in `chrome.storage.*`. The **only** optional outbound call is to a user's **local Ollama** (`localhost:11434`, off by default, `optional_host_permissions` requested at opt-in) for "Refine with AI" and the tab chat — core works fully without it.
 
 ## Commands
 
@@ -69,3 +69,8 @@ Store updates fed from `chrome.storage.onChanged` are wrapped in `startTransitio
 `docs/ARCHITECTURE.md` is the technical deep-dive (data flow, storage schema, time-tracking state machine, component map). It was previously duplicated with a stale second half describing a removed Focus/Pomodoro feature — that has been removed; the doc now matches the code.
 
 **Still treat `src/types/index.ts` as the authoritative data model.** Two fields exist but carry no behavior: `EnrichedTab.tags` renders as chips in `TabCard` but has no add/edit UI (always `[]`), and `DailyAnalytics.distractionDomains` is never populated. There is no focus-mode/Pomodoro feature — the README says "No focus timers."
+
+## Design System
+Always read `DESIGN.md` before making any visual or UI decisions. All aesthetic direction, typography, color, spacing, layout, depth, and motion are defined there. Do not deviate without explicit user approval; in QA/review, flag any code that doesn't match it.
+
+Direction: **"Spatial decks + Timeline"** (Apple-thinking). Two rules: **tabs are objects, not records** (favicon is the hero, metadata recedes) and **color is information, never decoration** (hue = favicon identity or status only). Default view = Wallet-style site **decks**; clicking a deck opens a **popover** of that site's tabs with per-tab close. Second view = **Timeline** (tabs by attention over time, with safe "clear forgotten" cleanup). Deliberately retires the current data-row cards, emoji (🗂🧟👻💤), candy chips, and indigo gradient. Type = the **system font stack** (real SF Pro on macOS) + a mono for counts/labels; if cross-platform-identical type is later wanted, self-host one grotesk as woff2 (no CDN — MV3 CSP + offline). This aesthetic uses real depth (shadows, blur, spring motion), not flat surfaces.

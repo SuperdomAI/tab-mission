@@ -42,6 +42,9 @@ export interface AppSettings {
   unvisitedAutoCloseMinutes: number;
   tabLimitWarning: number;
   theme: "dark" | "light";
+  /** Optional local-AI assist via Ollama (off by default, fully optional). */
+  ollamaEnabled: boolean;
+  ollamaModel: string;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -51,6 +54,39 @@ export const DEFAULT_SETTINGS: AppSettings = {
   unvisitedAutoCloseMinutes: 30,
   tabLimitWarning: 30,
   theme: "dark",
+  ollamaEnabled: false,
+  ollamaModel: "llama3.2",
 };
 
-export type StorageKey = "tabs" | "analytics" | "sessions" | "settings";
+/**
+ * A named, goal-driven set-aside of tabs. Phase 2 "Workspaces": type a goal,
+ * the irrelevant tabs are snapshotted here and closed (reversibly), and can be
+ * restored later. Stored UI-side under "workspaces" (avoids the shared-writer
+ * hazard the `sessions` key has).
+ */
+export const WORKSPACE_SCHEMA_VERSION = 1;
+
+export interface Workspace {
+  id: string; // "workspace-<timestamp>"
+  schemaVersion: number;
+  goal: string;
+  createdAt: number;
+  /** the set-aside (stashed) tabs, in the SavedSession snapshot shape */
+  tabs: { title: string; url: string; favIconUrl: string }[];
+}
+
+/** Points at the most recent stash so it can be one-click undone. */
+export interface WorkspaceUndo {
+  workspaceId: string;
+  createdAt: number;
+  count: number;
+}
+
+export type StorageKey =
+  | "tabs"
+  | "analytics"
+  | "sessions"
+  | "settings"
+  | "workspaces"
+  | "workspaceUndo"
+  | "viewMode";
