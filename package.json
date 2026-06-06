@@ -1,6 +1,6 @@
 {
   "name": "tab-mission-control",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "A Chrome extension that replaces your new tab page with a clean, powerful tab management dashboard — domain grouping, fuzzy search, session saving, and usage analytics.",
   "type": "module",
   "scripts": {
