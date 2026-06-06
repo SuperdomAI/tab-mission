@@ -1,6 +1,12 @@
 import { create } from "zustand";
 export { useShallow } from "zustand/react/shallow";
-import type { EnrichedTab, AppSettings, SavedSession } from "../types/index";
+import type {
+  EnrichedTab,
+  AppSettings,
+  SavedSession,
+  Workspace,
+  WorkspaceUndo,
+} from "../types/index";
 import { DEFAULT_SETTINGS } from "../types/index";
 
 export type ViewMode = "stacks" | "timeline";
@@ -9,12 +15,16 @@ interface TabStore {
   tabs: EnrichedTab[];
   settings: AppSettings;
   sessions: SavedSession[];
+  workspaces: Workspace[];
+  workspaceUndo: WorkspaceUndo | null;
   isLoading: boolean;
   viewMode: ViewMode;
 
   setTabs: (tabs: EnrichedTab[]) => void;
   setSettings: (settings: AppSettings) => void;
   setSessions: (sessions: SavedSession[]) => void;
+  setWorkspaces: (workspaces: Workspace[]) => void;
+  setWorkspaceUndo: (undo: WorkspaceUndo | null) => void;
   setLoading: (loading: boolean) => void;
   /** Persisting setter — for UI controls. */
   setViewMode: (mode: ViewMode) => void;
@@ -33,12 +43,16 @@ export const useTabStore = create<TabStore>((set) => ({
   tabs: [],
   settings: DEFAULT_SETTINGS,
   sessions: [],
+  workspaces: [],
+  workspaceUndo: null,
   isLoading: true,
   viewMode: "stacks",
 
   setTabs: (tabs) => set({ tabs }),
   setSettings: (settings) => set({ settings }),
   setSessions: (sessions) => set({ sessions }),
+  setWorkspaces: (workspaces) => set({ workspaces }),
+  setWorkspaceUndo: (workspaceUndo) => set({ workspaceUndo }),
   setLoading: (isLoading) => set({ isLoading }),
   setViewMode: (viewMode) => {
     set({ viewMode });

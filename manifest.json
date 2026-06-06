@@ -5,6 +5,7 @@
   "version": "1.0.0",
   "description": "Take command of your browser tabs. Organize by domain, search instantly, hibernate inactive tabs, and save sessions — all from your new tab page.",
   "permissions": ["tabs", "windows", "storage", "idle", "alarms", "tabGroups", "favicon"],
+  "optional_host_permissions": ["http://localhost/*", "http://127.0.0.1/*"],
   "minimum_chrome_version": "116",
   "background": {
     "service_worker": "src/background/service-worker.ts",
@@ -17,7 +18,7 @@
     "default_title": "Tab Mission Control"
   },
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'"
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' http://localhost:11434 http://127.0.0.1:11434"
   },
   "icons": {
     "16": "icons/icon16.png",

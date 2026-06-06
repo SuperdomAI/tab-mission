@@ -1,10 +1,14 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useTabs } from "./hooks/useTabs";
 import { useTabStore, useShallow } from "../store/tabStore";
+import { useWorkspaces } from "./hooks/useWorkspaces";
 import CommandPalette from "./components/CommandPalette";
 import ViewSwitcher from "./components/ViewSwitcher";
 import StacksView from "./components/StacksView";
 import TimelineView from "./components/TimelineView";
+import FocusProposal from "./components/FocusProposal";
+import WorkspacesManager from "./components/WorkspacesManager";
+import AskAI from "./components/AskAI";
 import SessionManager from "./components/SessionManager";
 import AnalyticsDashboard from "./components/AnalyticsDashboard";
 import Settings from "./components/Settings";
@@ -25,6 +29,18 @@ export default function App() {
   const [showSessions, setShowSessions] = useState(false);
   const [showAnalytics, setShowAnalytics] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showWorkspaces, setShowWorkspaces] = useState(false);
+  const [showAskAI, setShowAskAI] = useState(false);
+  const [focusGoal, setFocusGoal] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ count: number } | null>(null);
+
+  const { undoLast } = useWorkspaces();
+
+  useEffect(() => {
+    if (!toast) return;
+    const id = setTimeout(() => setToast(null), 8000);
+    return () => clearTimeout(id);
+  }, [toast]);
 
   const tabCount = tabs.length;
   const windows = new Set(tabs.map((t) => t.windowId)).size;
@@ -71,7 +87,11 @@ export default function App() {
       </header>
 
       {/* ── Command palette (⌘K) ───────────────────────────────────── */}
-      <CommandPalette />
+      <CommandPalette
+        onFocus={(goal) => setFocusGoal(goal)}
+        onOpenWorkspaces={() => setShowWorkspaces(true)}
+        onAskAI={() => setShowAskAI(true)}
+      />
 
       {/* ── Main ───────────────────────────────────────────────────── */}
       <main className="flex-1 px-9 py-4">
@@ -93,12 +113,46 @@ export default function App() {
         </span>
         <div className="flex-1" />
         <button
-          onClick={() => setShowSessions(true)}
+          onClick={() => setShowWorkspaces(true)}
           className="text-[12px] text-muted bg-white/[0.04] border border-border rounded-[9px] px-3 py-2 hover:text-ink transition-colors"
+        >
+          Workspaces
+        </button>
+        <button
+          onClick={() => setShowSessions(true)}
+          className="ml-2 text-[12px] text-muted bg-white/[0.04] border border-border rounded-[9px] px-3 py-2 hover:text-ink transition-colors"
         >
           Sessions
         </button>
       </footer>
+
+      {/* ── Focus + Workspaces ─────────────────────────────────────── */}
+      <FocusProposal
+        open={focusGoal !== null}
+        goal={focusGoal ?? ""}
+        onClose={() => setFocusGoal(null)}
+        onDone={(count) => count > 0 && setToast({ count })}
+      />
+      <WorkspacesManager open={showWorkspaces} onClose={() => setShowWorkspaces(false)} />
+      <AskAI open={showAskAI} onClose={() => setShowAskAI(false)} />
+
+      {/* ── Undo toast ─────────────────────────────────────────────── */}
+      {toast && (
+        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[60] flex items-center gap-3 bg-popover border border-border rounded-[12px] px-4 py-3 shadow-[0_24px_60px_-20px_#000] animate-fade-in-up">
+          <span className="text-[13px] text-ink">
+            Set aside {toast.count} tab{toast.count !== 1 ? "s" : ""}
+          </span>
+          <button
+            onClick={async () => {
+              await undoLast();
+              setToast(null);
+            }}
+            className="text-[12px] text-accent font-medium hover:brightness-110"
+          >
+            Undo
+          </button>
+        </div>
+      )}
 
       {/* ── Drawers ────────────────────────────────────────────────── */}
       <SessionManager open={showSessions} onClose={() => setShowSessions(false)} />

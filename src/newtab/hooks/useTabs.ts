@@ -6,6 +6,8 @@ import type {
   DailyAnalytics,
   AppSettings,
   SavedSession,
+  Workspace,
+  WorkspaceUndo,
 } from "../../types/index";
 import { DEFAULT_SETTINGS } from "../../types/index";
 
@@ -22,6 +24,8 @@ export function useTabs() {
   const setTabs = useTabStore((s) => s.setTabs);
   const setSettings = useTabStore((s) => s.setSettings);
   const setSessions = useTabStore((s) => s.setSessions);
+  const setWorkspaces = useTabStore((s) => s.setWorkspaces);
+  const setWorkspaceUndo = useTabStore((s) => s.setWorkspaceUndo);
   const setLoading = useTabStore((s) => s.setLoading);
   const hydrateViewMode = useTabStore((s) => s.hydrateViewMode);
   const setAnalytics = useAnalyticsStore((s) => s.setAnalytics);
@@ -38,6 +42,8 @@ export function useTabs() {
           "tabs",
           "analytics",
           "sessions",
+          "workspaces",
+          "workspaceUndo",
           "viewMode",
         ]);
         const settingsResult = await chrome.storage.sync.get("settings");
@@ -46,6 +52,8 @@ export function useTabs() {
           setTabs((result.tabs as EnrichedTab[]) || []);
           setAnalytics((result.analytics as DailyAnalytics[]) || []);
           setSessions((result.sessions as SavedSession[]) || []);
+          setWorkspaces((result.workspaces as Workspace[]) || []);
+          setWorkspaceUndo((result.workspaceUndo as WorkspaceUndo) ?? null);
           if (result.viewMode === "stacks" || result.viewMode === "timeline") {
             hydrateViewMode(result.viewMode);
           }
@@ -90,6 +98,14 @@ export function useTabs() {
           }
           if (changes.sessions?.newValue !== undefined) {
             setSessions(changes.sessions.newValue as SavedSession[]);
+          }
+          if (changes.workspaces?.newValue !== undefined) {
+            setWorkspaces(changes.workspaces.newValue as Workspace[]);
+          }
+          if ("workspaceUndo" in changes) {
+            setWorkspaceUndo(
+              (changes.workspaceUndo.newValue as WorkspaceUndo) ?? null,
+            );
           }
           if (
             changes.viewMode?.newValue === "stacks" ||

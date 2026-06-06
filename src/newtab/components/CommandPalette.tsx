@@ -12,8 +12,14 @@ import {
 } from "../../lib/commandFilter";
 import { selectDuplicates, selectUnvisited, selectZombies } from "../../lib/bulkSelectors";
 
+interface CommandPaletteProps {
+  onFocus: (goal: string) => void;
+  onOpenWorkspaces: () => void;
+  onAskAI: () => void;
+}
+
 /** The ⌘K focal surface — the single owner of the ⌘K shortcut. */
-export default function CommandPalette() {
+export default function CommandPalette({ onFocus, onOpenWorkspaces, onAskAI }: CommandPaletteProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
 
@@ -53,8 +59,12 @@ export default function CommandPalette() {
       { id: "close-unvisited", label: "Close unvisited tabs", keywords: ["never"], run: run(() => closeMany(selectUnvisited(tabs).map((t) => t.id))) },
       { id: "close-zombies", label: "Close zombie tabs", keywords: ["stale", "old"], run: run(() => closeMany(selectZombies(tabs, settings).map((t) => t.id))) },
       { id: "hibernate-all", label: "Hibernate background tabs", keywords: ["sleep", "discard"], run: run(() => hibernateMany(tabs)) },
+      { id: "workspaces", label: "Open Workspaces", keywords: ["workspace", "focus", "saved"], run: run(() => onOpenWorkspaces()) },
+      ...(settings.ollamaEnabled
+        ? [{ id: "ask-ai", label: "Ask AI about your tabs", keywords: ["chat", "ollama"], run: run(() => onAskAI()) }]
+        : []),
     ];
-  }, [tabs, settings, setViewMode, closeMany, hibernateMany]);
+  }, [tabs, settings, setViewMode, closeMany, hibernateMany, onOpenWorkspaces, onAskAI]);
 
   const visibleCommands = filterCommands(commands, query);
 
@@ -78,6 +88,22 @@ export default function CommandPalette() {
         </div>
         <Command.List className="max-h-[50vh] overflow-y-auto pb-2">
           <Command.Empty className="px-5 py-6 text-muted text-sm">No matches.</Command.Empty>
+
+          {query.trim().length > 0 && (
+            <Command.Group heading="Focus">
+              <Command.Item
+                value="__focus"
+                onSelect={() => {
+                  onFocus(query.trim());
+                  setOpen(false);
+                }}
+              >
+                <span>
+                  Focus on “{query.trim()}” <span className="text-faint">— set other tabs aside</span>
+                </span>
+              </Command.Item>
+            </Command.Group>
+          )}
 
           {visibleCommands.length > 0 && (
             <Command.Group heading="Commands">
