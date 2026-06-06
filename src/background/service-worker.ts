@@ -1,5 +1,29 @@
 import type { EnrichedTab, DailyAnalytics, SavedSession } from "../types/index";
 
+// ─── Ollama proxy (optional local AI) ────────────────────────────────────────
+// Calls from the new-tab PAGE send `Origin: chrome-extension://…`, which
+// Ollama's CORS gate rejects with 403. Proxying through the background (no web
+// origin attached) makes the request succeed. Requires the optional localhost
+// host permission, granted when the user enables AI in Settings.
+chrome.runtime.onMessage.addListener(
+  (msg: { type?: string; path?: string; init?: { method?: string; body?: string } }, _sender, sendResponse) => {
+    if (msg?.type !== "ollama-fetch") return;
+    (async () => {
+      try {
+        const r = await fetch(`http://localhost:11434${msg.path ?? ""}`, {
+          method: msg.init?.method ?? "GET",
+          headers: msg.init?.body ? { "Content-Type": "application/json" } : undefined,
+          body: msg.init?.body,
+        });
+        sendResponse({ ok: r.ok, status: r.status, body: await r.text() });
+      } catch (e) {
+        sendResponse({ ok: false, status: 0, body: String(e) });
+      }
+    })();
+    return true; // keep the message channel open for the async response
+  },
+);
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function extractDomain(url: string): string {
