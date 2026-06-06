@@ -2,6 +2,7 @@ import React, { useState, useTransition } from "react";
 import { useTabStore } from "../../store/tabStore";
 import type { AppSettings } from "../../types/index";
 import { ensureOllamaPermission, detectOllama } from "../../lib/ollama";
+import Switch from "./Switch";
 
 interface SettingsProps {
   open: boolean;
@@ -184,29 +185,16 @@ export default function Settings({ open, onClose }: SettingsProps) {
               <label className={labelClass + " mb-0"}>
                 Auto-close Unvisited Tabs
               </label>
-              <button
-                onClick={() =>
+              <Switch
+                checked={local.unvisitedAutoCloseEnabled}
+                onChange={() =>
                   update(
                     "unvisitedAutoCloseEnabled",
                     !local.unvisitedAutoCloseEnabled,
                   )
                 }
-                className={`relative w-10 h-5 rounded-full transition-all flex-shrink-0 ${
-                  local.unvisitedAutoCloseEnabled
-                    ? "bg-indigo-600"
-                    : "bg-gray-700"
-                }`}
-                role="switch"
-                aria-checked={local.unvisitedAutoCloseEnabled}
-              >
-                <span
-                  className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${
-                    local.unvisitedAutoCloseEnabled
-                      ? "translate-x-5"
-                      : "translate-x-0.5"
-                  }`}
-                />
-              </button>
+                label="Auto-close unvisited tabs"
+              />
             </div>
             <p className="text-xs text-gray-600">
               Automatically close tabs that were never visited after the
@@ -266,20 +254,11 @@ export default function Settings({ open, onClose }: SettingsProps) {
           <div className={sectionClass}>
             <div className="flex items-center justify-between mb-2">
               <label className={labelClass + " mb-0"}>Local AI (Ollama)</label>
-              <button
-                onClick={toggleOllama}
-                className={`relative w-10 h-5 rounded-full transition-all flex-shrink-0 ${
-                  local.ollamaEnabled ? "bg-indigo-600" : "bg-gray-700"
-                }`}
-                role="switch"
-                aria-checked={local.ollamaEnabled}
-              >
-                <span
-                  className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${
-                    local.ollamaEnabled ? "translate-x-5" : "translate-x-0.5"
-                  }`}
-                />
-              </button>
+              <Switch
+                checked={local.ollamaEnabled}
+                onChange={toggleOllama}
+                label="Local AI (Ollama)"
+              />
             </div>
             <p className="text-xs text-gray-600">
               Optional. Lets the Focus view "Refine with AI" using a local Ollama
