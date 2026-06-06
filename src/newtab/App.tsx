@@ -14,6 +14,9 @@ import AnalyticsDashboard from "./components/AnalyticsDashboard";
 import Settings from "./components/Settings";
 import Tooltip from "./components/Tooltip";
 
+// Swap this one-liner anytime — it shows in the footer next to the credit.
+const FOOTER_TAGLINE = "For people who've never closed a tab in their life.";
+
 export default function App() {
   useTabs();
 
@@ -107,10 +110,21 @@ export default function App() {
       </main>
 
       {/* ── Footer ─────────────────────────────────────────────────── */}
-      <footer className="flex-none flex items-center px-9 py-3.5 border-t border-hairline">
+      <footer className="flex-none flex items-center gap-3 px-9 py-3.5 border-t border-hairline">
         <span className="font-mono text-[11px] text-faint select-none">
           Press <kbd>⌘K</kbd> for commands
         </span>
+        <span className="hidden lg:inline text-[12px] text-faint select-none">
+          {FOOTER_TAGLINE}
+        </span>
+        <a
+          href="https://superdom.ai"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[12px] text-muted hover:text-accent transition-colors"
+        >
+          Built by SuperdomAI ↗
+        </a>
         <div className="flex-1" />
         <button
           onClick={() => setShowWorkspaces(true)}
