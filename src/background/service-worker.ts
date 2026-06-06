@@ -277,8 +277,10 @@ chrome.windows.onRemoved.addListener(async (windowId) => {
     const windowTabs = tabs.filter((t) => t.windowId === windowId);
     if (windowTabs.length === 0) return;
 
-    const result = await chrome.storage.local.get("sessions");
-    const sessions: SavedSession[] = result.sessions || [];
+    const result = (await chrome.storage.local.get("sessions")) as {
+      sessions?: SavedSession[];
+    };
+    const sessions: SavedSession[] = result.sessions ?? [];
     const newSession: SavedSession = {
       id: `auto-${Date.now()}`,
       name: `Auto-save: ${new Date().toLocaleString()}`,

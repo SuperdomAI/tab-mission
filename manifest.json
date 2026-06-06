@@ -4,7 +4,7 @@
   "short_name": "Tab MC",
   "version": "1.0.0",
   "description": "Take command of your browser tabs. Organize by domain, search instantly, hibernate inactive tabs, and save sessions — all from your new tab page.",
-  "permissions": ["tabs", "windows", "storage", "idle", "alarms", "tabGroups"],
+  "permissions": ["tabs", "windows", "storage", "idle", "alarms", "tabGroups", "favicon"],
   "minimum_chrome_version": "116",
   "background": {
     "service_worker": "src/background/service-worker.ts",

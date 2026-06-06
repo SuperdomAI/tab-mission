@@ -3,16 +3,30 @@ export { useShallow } from "zustand/react/shallow";
 import type { EnrichedTab, AppSettings, SavedSession } from "../types/index";
 import { DEFAULT_SETTINGS } from "../types/index";
 
+export type ViewMode = "stacks" | "timeline";
+
 interface TabStore {
   tabs: EnrichedTab[];
   settings: AppSettings;
   sessions: SavedSession[];
   isLoading: boolean;
+  viewMode: ViewMode;
 
   setTabs: (tabs: EnrichedTab[]) => void;
   setSettings: (settings: AppSettings) => void;
   setSessions: (sessions: SavedSession[]) => void;
   setLoading: (loading: boolean) => void;
+  /** Persisting setter — for UI controls. */
+  setViewMode: (mode: ViewMode) => void;
+  /** Non-persisting setter — for hydrating from storage (avoids write loops). */
+  hydrateViewMode: (mode: ViewMode) => void;
+  /**
+   * Optimistic removal: drop tabs from the mirror immediately so the UI feels
+   * instant. The authoritative state still arrives via chrome.storage.onChanged
+   * once the service worker processes the real tab removal; on failure the
+   * caller re-syncs from storage.
+   */
+  removeTabs: (ids: number[]) => void;
 }
 
 export const useTabStore = create<TabStore>((set) => ({
@@ -20,11 +34,27 @@ export const useTabStore = create<TabStore>((set) => ({
   settings: DEFAULT_SETTINGS,
   sessions: [],
   isLoading: true,
+  viewMode: "stacks",
 
   setTabs: (tabs) => set({ tabs }),
   setSettings: (settings) => set({ settings }),
   setSessions: (sessions) => set({ sessions }),
   setLoading: (isLoading) => set({ isLoading }),
+  setViewMode: (viewMode) => {
+    set({ viewMode });
+    // Persist as a per-device UI preference (best-effort).
+    try {
+      chrome.storage?.local?.set({ viewMode });
+    } catch {
+      /* ignore in non-extension contexts */
+    }
+  },
+  hydrateViewMode: (viewMode) => set({ viewMode }),
+  removeTabs: (ids) =>
+    set((s) => {
+      const drop = new Set(ids);
+      return { tabs: s.tabs.filter((t) => !drop.has(t.id)) };
+    }),
 }));
 
 // ─── Selectors ────────────────────────────────────────────────────────────────
