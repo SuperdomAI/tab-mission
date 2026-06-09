@@ -1,4 +1,4 @@
-# Tab Mission Control
+# Tab Mission
 
 > A Chrome Extension that replaces your new tab page with a clean, powerful tab management dashboard — domain grouping, fuzzy search, session saving, and usage analytics. No focus timers. No noise. Just your tabs, under control.
 
@@ -21,7 +21,7 @@
 2. Open **`chrome://extensions/`** in Chrome
 3. Enable **Developer mode** (toggle, top-right corner)
 4. Click **Load unpacked** → select the **`dist/`** folder inside this project
-5. Open any **new tab** — Tab Mission Control takes over
+5. Open any **new tab** — Tab Mission takes over
 
 To update after code changes: run `npm run build` again, then click the **↺ refresh** icon on the extension card at `chrome://extensions/`.
 
@@ -43,10 +43,10 @@ Then reload the extension manually after each rebuild.
    ```
 2. Zip the `dist/` folder:
    ```bash
-   cd dist && zip -r ../tab-mission-control.zip . && cd ..
+   cd dist && zip -r ../tab-mission.zip . && cd ..
    ```
 3. Go to the [Chrome Web Store Developer Dashboard](https://chrome.google.com/webstore/devconsole)
-4. Click **New Item** → upload `tab-mission-control.zip`
+4. Click **New Item** → upload `tab-mission.zip`
 5. Fill in store listing details (description, screenshots, category: **Productivity**)
 6. Submit for review (typically 1–3 business days)
 
@@ -71,7 +71,7 @@ Then reload the extension manually after each rebuild.
 ## Project Structure
 
 ```
-tab-mission-control/
+tab-mission/
 ├── manifest.json               # MV3 manifest (version 1.0.0)
 ├── vite.config.ts              # Vite + @tailwindcss/vite + @crxjs/vite-plugin
 ├── tsconfig.json
@@ -171,4 +171,4 @@ Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) before
 
 ## License
 
-[MIT](LICENSE) © Tab Mission Control Contributors
+[MIT](LICENSE) © Tab Mission Contributors

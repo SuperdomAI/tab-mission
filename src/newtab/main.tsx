@@ -22,7 +22,7 @@ class ErrorBoundary extends React.Component<
             background: "#111",
           }}
         >
-          <h2>Tab Mission Control crashed</h2>
+          <h2>Tab Mission crashed</h2>
           <pre style={{ whiteSpace: "pre-wrap", fontSize: 12 }}>
             {(this.state.error as Error).message}
             {"\n"}

@@ -29,15 +29,15 @@ export default function SessionManager({ open, onClose }: SessionManagerProps) {
       )}
 
       <aside
-        className={`drawer-panel fixed top-0 right-0 h-full w-80 z-50 bg-gray-900 border-l border-gray-800/60 shadow-2xl flex flex-col ${
+        className={`drawer-panel fixed top-0 right-0 h-full w-80 z-50 bg-popover border-l border-hairline shadow-2xl flex flex-col ${
           open ? "translate-x-0" : "translate-x-full"
         }`}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-800/60">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-hairline">
           <div className="flex items-center gap-2.5">
             <svg
-              className="w-4 h-4 text-indigo-400"
+              className="w-4 h-4 text-muted"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -49,19 +49,19 @@ export default function SessionManager({ open, onClose }: SessionManagerProps) {
                 d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"
               />
             </svg>
-            <h2 className="font-semibold text-gray-100 text-base">Sessions</h2>
+            <h2 className="font-semibold text-ink text-base">Sessions</h2>
           </div>
           <div className="flex items-center gap-2">
             <button
               onClick={() => handleSave()}
               disabled={isPending}
-              className="text-xs bg-indigo-600/80 hover:bg-indigo-600 text-white px-3 py-1.5 rounded-lg transition-all disabled:opacity-50 font-medium"
+              className="text-xs bg-accent hover:bg-accent/90 text-white px-3 py-1.5 rounded-[9px] transition-colors disabled:opacity-50 font-medium"
             >
               + Save current
             </button>
             <button
               onClick={onClose}
-              className="p-1.5 rounded-lg text-gray-500 hover:text-gray-200 hover:bg-gray-800 transition-all"
+              className="p-1.5 rounded-[9px] text-faint hover:text-ink hover:bg-white/[0.06] transition-colors"
               aria-label="Close"
             >
               <svg
@@ -84,9 +84,9 @@ export default function SessionManager({ open, onClose }: SessionManagerProps) {
         <div className="flex-1 overflow-y-auto p-4 space-y-3">
           {sessions.length === 0 ? (
             <div className="text-center py-14">
-              <div className="w-12 h-12 rounded-2xl bg-gray-800/60 border border-gray-700/40 flex items-center justify-center mx-auto mb-4">
+              <div className="w-12 h-12 rounded-2xl bg-surface border border-hairline flex items-center justify-center mx-auto mb-4">
                 <svg
-                  className="w-6 h-6 text-gray-600"
+                  className="w-6 h-6 text-faint"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -99,8 +99,8 @@ export default function SessionManager({ open, onClose }: SessionManagerProps) {
                   />
                 </svg>
               </div>
-              <p className="text-sm text-gray-500">No saved sessions yet.</p>
-              <p className="text-xs mt-1 text-gray-600">
+              <p className="text-sm text-muted">No saved sessions yet.</p>
+              <p className="text-xs mt-1 text-faint">
                 Save your current tabs as a session to restore them later.
               </p>
             </div>
@@ -108,18 +108,18 @@ export default function SessionManager({ open, onClose }: SessionManagerProps) {
             [...sessions].reverse().map((session) => (
               <div
                 key={session.id}
-                className="bg-gray-800/60 rounded-xl p-3.5 border border-gray-700/40 hover:border-gray-600/50 transition-all group"
+                className="bg-surface rounded-xl p-3.5 border border-hairline hover:border-border transition-colors group"
               >
                 <div className="flex items-start justify-between gap-2 mb-2">
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-200 truncate">
+                    <p className="text-sm font-medium text-ink truncate">
                       {session.name}
                     </p>
-                    <p className="text-xs text-gray-600 mt-0.5">
+                    <p className="text-xs text-faint mt-0.5">
                       {format(session.savedAt, "MMM d, yyyy · h:mm a")}
                     </p>
                   </div>
-                  <span className="text-xs bg-gray-700/60 text-gray-400 px-2 py-0.5 rounded-full border border-gray-600/30 flex-shrink-0 tabular-nums">
+                  <span className="text-xs bg-white/[0.06] text-muted px-2 py-0.5 rounded-full border border-border flex-shrink-0 font-mono tabular-nums">
                     {session.tabs.length} tab
                     {session.tabs.length !== 1 ? "s" : ""}
                   </span>
@@ -130,7 +130,7 @@ export default function SessionManager({ open, onClose }: SessionManagerProps) {
                   {session.tabs.slice(0, 4).map((tab, i) => (
                     <div
                       key={i}
-                      className="flex items-center gap-1.5 text-xs text-gray-500 truncate"
+                      className="flex items-center gap-1.5 text-xs text-muted truncate"
                     >
                       {tab.favIconUrl ? (
                         <img
@@ -142,13 +142,13 @@ export default function SessionManager({ open, onClose }: SessionManagerProps) {
                           }
                         />
                       ) : (
-                        <div className="w-3 h-3 rounded-sm bg-gray-700 flex-shrink-0" />
+                        <div className="w-3 h-3 rounded-sm bg-white/10 flex-shrink-0" />
                       )}
                       <span className="truncate">{tab.title || tab.url}</span>
                     </div>
                   ))}
                   {session.tabs.length > 4 && (
-                    <p className="text-xs text-gray-600">
+                    <p className="text-xs text-faint">
                       +{session.tabs.length - 4} more…
                     </p>
                   )}
@@ -158,7 +158,7 @@ export default function SessionManager({ open, onClose }: SessionManagerProps) {
                   <button
                     onClick={() => restoreSession(session.id)}
                     disabled={isPending}
-                    className="flex-1 px-3 py-1.5 rounded-lg bg-indigo-600/80 hover:bg-indigo-600 text-white text-xs font-medium disabled:opacity-50 transition-all flex items-center justify-center gap-1.5"
+                    className="flex-1 px-3 py-1.5 rounded-[9px] bg-accent hover:bg-accent/90 text-white text-xs font-medium disabled:opacity-50 transition-colors flex items-center justify-center gap-1.5"
                   >
                     <svg
                       className="w-3 h-3"
@@ -178,7 +178,7 @@ export default function SessionManager({ open, onClose }: SessionManagerProps) {
                   <button
                     onClick={() => deleteSession(session.id)}
                     disabled={isPending}
-                    className="px-2.5 py-1.5 rounded-lg bg-gray-700/60 hover:bg-red-900/40 text-gray-400 hover:text-red-400 text-xs disabled:opacity-50 transition-all border border-gray-600/30 hover:border-red-800/40"
+                    className="px-2.5 py-1.5 rounded-[9px] bg-white/[0.06] hover:bg-status-unvisited/15 text-muted hover:text-status-unvisited text-xs disabled:opacity-50 transition-colors border border-border hover:border-status-unvisited/40"
                     aria-label="Delete session"
                   >
                     <svg

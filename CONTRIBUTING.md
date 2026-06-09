@@ -1,4 +1,4 @@
-# Contributing to Tab Mission Control
+# Contributing to Tab Mission
 
 Thanks for taking the time to contribute! This is a focused Chrome extension — contributions that improve tab management UX, performance, or accessibility are most welcome.
 
@@ -15,8 +15,8 @@ Thanks for taking the time to contribute! This is a focused Chrome extension —
 ### Local setup
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/tab-mission-control.git
-cd tab-mission-control
+git clone https://github.com/YOUR_USERNAME/tab-mission.git
+cd tab-mission
 npm install
 npm run dev   # auto-rebuilds on every save
 ```
@@ -36,7 +36,7 @@ After code changes, click the **↺ Reload** icon on the extension card.
 
 ### Reporting a bug
 
-Open an [issue](https://github.com/YOUR_USERNAME/tab-mission-control/issues) with:
+Open an [issue](https://github.com/YOUR_USERNAME/tab-mission/issues) with:
 
 - Chrome version and OS
 - Steps to reproduce

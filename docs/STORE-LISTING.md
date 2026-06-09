@@ -1,13 +1,13 @@
-# Tab Mission Control — Chrome Web Store Publish Kit (v1.1.0)
+# Tab Mission — Chrome Web Store Publish Kit (v1.1.0)
 
-Artifact to upload: `tab-mission-control-v1.1.0.zip` (repo root, gitignored — rebuild as needed).
+Artifact to upload: `tab-mission-v1.1.0.zip` (repo root, gitignored — rebuild as needed).
 Category: **Productivity** · Language: **English**
 
 ---
 
 ## 1. Store name
 ```
-Tab Mission Control
+Tab Mission
 ```
 
 ## 2. Short description (max 132 chars)
@@ -19,7 +19,7 @@ Your new tab, under control: spatial decks, ⌘K command palette, a timeline, an
 ```
 Take command of your browser tabs — right from your new tab page.
 
-Tab Mission Control turns a wall of open tabs into something calm and fast. No accounts, no servers, no tracking. Everything stays on your machine.
+Tab Mission turns a wall of open tabs into something calm and fast. No accounts, no servers, no tracking. Everything stays on your machine.
 
 VIEWS
 • Stacks — every site becomes a tidy, recognizable card "deck." Click a deck to see that site's tabs and close them individually, or in bulk.
@@ -29,7 +29,7 @@ VIEWS
 Press ⌘K (Ctrl+K) to search every tab, jump to one, switch views, or run a bulk action — keyboard-first, instant.
 
 WORKSPACES (focus on a goal)
-Type what you're working on and Tab Mission Control proposes which tabs to keep and which to set aside. Confirm, and the rest are tucked into a named Workspace — closed, but one click to undo and easy to restore later. Nothing is ever deleted without a safety net, and pinned tabs are never touched.
+Type what you're working on and Tab Mission proposes which tabs to keep and which to set aside. Confirm, and the rest are tucked into a named Workspace — closed, but one click to undo and easy to restore later. Nothing is ever deleted without a safety net, and pinned tabs are never touched.
 
 CLEAN UP THE CHAOS
 • Close duplicates, never-visited, and stale "zombie" tabs in one move.
@@ -89,12 +89,12 @@ Optional host permission (http://localhost, http://127.0.0.1) — Requested at r
    ```
 2. Package the zip (rebuild if you changed code):
    ```bash
-   cd dist && zip -rq ../tab-mission-control-v1.1.0.zip . && cd ..
+   cd dist && zip -rq ../tab-mission-v1.1.0.zip . && cd ..
    ```
 3. Go to the Chrome Web Store Developer Dashboard:
    https://chrome.google.com/webstore/devconsole
    (one-time: pay the $5 developer registration if you haven't.)
-4. **New Item** → upload `tab-mission-control-v1.1.0.zip`. (Future updates: open the item → **Package** → **Upload new package**.)
+4. **New Item** → upload `tab-mission-v1.1.0.zip`. (Future updates: open the item → **Package** → **Upload new package**.)
 5. Fill the listing using sections 1–4 above. Category: **Productivity**.
 6. Add store assets (images — see section 9 for generation prompts):
    • Icon 128×128 (already in the package).
@@ -118,7 +118,7 @@ Optional host permission (http://localhost, http://127.0.0.1) — Requested at r
 
 **Shared style block (prepend to any prompt):**
 ```
-A high-fidelity product UI screenshot of a Chrome new-tab extension called "Tab Mission Control". Aesthetic: quiet, premium, calm "control room" like Linear and Raycast. Near-black background #0A0B0D with a very subtle radial depth glow. Achromatic, monochrome surfaces; a single iris-violet accent #7C7AF2 used sparingly. Tabbed cards in dark surface #1A1C21 with hairline borders and soft shadows, rounded 12–16px corners. Monospace labels (uppercase, letter-spaced) for metadata; clean system sans (SF Pro) for titles. Real-looking website favicons. Generous spacing, no clutter, no gradients except a faint background vignette. Crisp legible text. Flat, modern, designer-grade.
+A high-fidelity product UI screenshot of a Chrome new-tab extension called "Tab Mission". Aesthetic: quiet, premium, calm "control room" like Linear and Raycast. Near-black background #0A0B0D with a very subtle radial depth glow. Achromatic, monochrome surfaces; a single iris-violet accent #7C7AF2 used sparingly. Tabbed cards in dark surface #1A1C21 with hairline borders and soft shadows, rounded 12–16px corners. Monospace labels (uppercase, letter-spaced) for metadata; clean system sans (SF Pro) for titles. Real-looking website favicons. Generous spacing, no clutter, no gradients except a faint background vignette. Crisp legible text. Flat, modern, designer-grade.
 ```
 
 **A) Stacks view (hero screenshot, 1280×800):**
@@ -148,12 +148,12 @@ A high-fidelity product UI screenshot of a Chrome new-tab extension called "Tab 
 
 **F) Small promo tile (440×280):**
 ```
-[STYLE BLOCK] A minimal promo tile. Centered: the app icon (a dark rounded square with two offset rounded cards, the front one iris-violet — a "deck" mark), the wordmark "Tab Mission Control" in clean white sans, and a one-line tagline "Your tabs, under control." in muted gray. Lots of negative space, near-black background, one subtle iris glow. No UI screenshot, just brand. 440×280.
+[STYLE BLOCK] A minimal promo tile. Centered: the app icon (a dark rounded square with two offset rounded cards, the front one iris-violet — a "deck" mark), the wordmark "Tab Mission" in clean white sans, and a one-line tagline "Your tabs, under control." in muted gray. Lots of negative space, near-black background, one subtle iris glow. No UI screenshot, just brand. 440×280.
 ```
 
 **G) Marquee promo (1400×560):**
 ```
-[STYLE BLOCK] A wide hero banner. Left third: the wordmark "Tab Mission Control" and tagline "Spatial decks. ⌘K palette. Goal-driven workspaces." Right two-thirds: a slightly angled, glossy depiction of the Stacks view with favicon decks and a floating ⌘K palette. Dark, premium, lots of depth and soft shadow, one iris accent. 1400×560.
+[STYLE BLOCK] A wide hero banner. Left third: the wordmark "Tab Mission" and tagline "Spatial decks. ⌘K palette. Goal-driven workspaces." Right two-thirds: a slightly angled, glossy depiction of the Stacks view with favicon decks and a floating ⌘K palette. Dark, premium, lots of depth and soft shadow, one iris accent. 1400×560.
 ```
 
 **Negative prompt (if your tool supports it):**

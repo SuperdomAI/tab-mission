@@ -16,7 +16,7 @@ interface TooltipState {
   arrowStyle: React.CSSProperties;
 }
 
-const BG = "#374151"; // gray-700
+const BG = "#262a31"; // elevated neutral — matches --color-border (DESIGN.md)
 const GAP = 8; // px between anchor edge and tooltip bubble
 const DELAY = 300; // ms before showing
 

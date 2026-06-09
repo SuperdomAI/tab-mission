@@ -43,10 +43,10 @@ export default function Settings({ open, onClose }: SettingsProps) {
     if (models.length > 0 && !models.includes(local.ollamaModel)) {
       // auto-pick an installed model (e.g. you have "mistral", default was "llama3.2")
       update("ollamaModel", models[0]);
-      setAiStatus(`Connected ✓ — using ${models[0]}`);
+      setAiStatus(`Connected — using ${models[0]}`);
     } else {
       setAiStatus(
-        `Connected ✓${local.ollamaModel ? ` — using ${local.ollamaModel}` : ""}`,
+        `Connected${local.ollamaModel ? ` — using ${local.ollamaModel}` : ""}`,
       );
     }
   }
@@ -73,9 +73,8 @@ export default function Settings({ open, onClose }: SettingsProps) {
   }
 
   const inputClass =
-    "w-full bg-gray-800/80 border border-gray-700/60 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/30 transition-all";
-  const labelClass =
-    "block text-xs font-semibold text-gray-400 mb-1.5 uppercase tracking-wider";
+    "w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-accent/40 focus:border-accent/40 transition-all";
+  const labelClass = "label-mono block mb-1.5";
   const sectionClass = "space-y-1.5";
 
   return (
@@ -88,15 +87,15 @@ export default function Settings({ open, onClose }: SettingsProps) {
       )}
 
       <aside
-        className={`drawer-panel fixed top-0 right-0 h-full w-96 z-50 bg-gray-900 border-l border-gray-800/60 shadow-2xl flex flex-col ${
+        className={`drawer-panel fixed top-0 right-0 h-full w-96 z-50 bg-popover border-l border-hairline shadow-2xl flex flex-col ${
           open ? "translate-x-0" : "translate-x-full"
         }`}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-800/60">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-hairline">
           <div className="flex items-center gap-2.5">
             <svg
-              className="w-4 h-4 text-indigo-400"
+              className="w-4 h-4 text-muted"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -114,11 +113,11 @@ export default function Settings({ open, onClose }: SettingsProps) {
                 d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
               />
             </svg>
-            <h2 className="font-semibold text-gray-100 text-base">Settings</h2>
+            <h2 className="font-semibold text-ink text-base">Settings</h2>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-gray-500 hover:text-gray-200 hover:bg-gray-800 transition-all"
+            className="p-1.5 rounded-[9px] text-faint hover:text-ink hover:bg-white/[0.06] transition-colors"
             aria-label="Close settings"
           >
             <svg
@@ -146,22 +145,22 @@ export default function Settings({ open, onClose }: SettingsProps) {
                 <button
                   key={t}
                   onClick={() => update("theme", t)}
-                  className={`flex-1 py-2.5 rounded-xl text-sm font-medium capitalize transition-all ${
+                  className={`flex-1 py-2.5 rounded-xl text-sm font-medium capitalize transition-colors ${
                     local.theme === t
-                      ? "bg-indigo-600 text-white shadow-lg shadow-indigo-900/40"
-                      : "bg-gray-800/60 text-gray-400 hover:bg-gray-800 border border-gray-700/40"
+                      ? "bg-accent/15 text-ink border border-accent/40"
+                      : "bg-white/[0.04] text-muted hover:text-ink hover:bg-white/[0.07] border border-border"
                   }`}
                 >
-                  {t === "dark" ? "🌙 Dark" : "☀️ Light"}
+                  {t}
                 </button>
               ))}
             </div>
-            <p className="text-xs text-gray-600 mt-1">
+            <p className="text-xs text-faint mt-1">
               Light theme applies on next page load.
             </p>
           </div>
 
-          <div className="border-t border-gray-800/60" />
+          <div className="border-t border-hairline" />
 
           {/* Zombie threshold */}
           <div className={sectionClass}>
@@ -180,11 +179,11 @@ export default function Settings({ open, onClose }: SettingsProps) {
                   )
                 }
               />
-              <span className="text-sm text-gray-500 whitespace-nowrap">
+              <span className="text-sm text-muted whitespace-nowrap">
                 hours
               </span>
             </div>
-            <p className="text-xs text-gray-600 mt-1">
+            <p className="text-xs text-faint mt-1">
               Tabs inactive longer than this are marked as zombies and can be
               bulk-closed.
             </p>
@@ -207,7 +206,7 @@ export default function Settings({ open, onClose }: SettingsProps) {
                 label="Auto-close unvisited tabs"
               />
             </div>
-            <p className="text-xs text-gray-600">
+            <p className="text-xs text-faint">
               Automatically close tabs that were never visited after the
               specified time.
             </p>
@@ -226,7 +225,7 @@ export default function Settings({ open, onClose }: SettingsProps) {
                     )
                   }
                 />
-                <span className="text-sm text-gray-500 whitespace-nowrap">
+                <span className="text-sm text-muted whitespace-nowrap">
                   minutes
                 </span>
               </div>
@@ -250,16 +249,16 @@ export default function Settings({ open, onClose }: SettingsProps) {
                   )
                 }
               />
-              <span className="text-sm text-gray-500 whitespace-nowrap">
+              <span className="text-sm text-muted whitespace-nowrap">
                 tabs
               </span>
             </div>
-            <p className="text-xs text-gray-600 mt-1">
+            <p className="text-xs text-faint mt-1">
               Show a warning badge when you exceed this number of open tabs.
             </p>
           </div>
 
-          <div className="border-t border-gray-800/60" />
+          <div className="border-t border-hairline" />
 
           {/* Local AI (Ollama) — optional */}
           <div className={sectionClass}>
@@ -271,12 +270,12 @@ export default function Settings({ open, onClose }: SettingsProps) {
                 label="Local AI (Ollama)"
               />
             </div>
-            <p className="text-xs text-gray-600">
+            <p className="text-xs text-faint">
               Optional. Lets the Focus view "Refine with AI" using a local Ollama
               model. Everything stays on your machine — no cloud, no keys. Core
               features work without it.
             </p>
-            {aiStatus && <p className="text-xs text-indigo-400 mt-1.5">{aiStatus}</p>}
+            {aiStatus && <p className="text-xs text-accent mt-1.5">{aiStatus}</p>}
             {local.ollamaEnabled && (
               <>
                 <div className="mt-2">
@@ -288,9 +287,9 @@ export default function Settings({ open, onClose }: SettingsProps) {
                     placeholder="model, e.g. llama3.2"
                   />
                 </div>
-                <p className="text-xs text-gray-600 mt-1.5">
+                <p className="text-xs text-faint mt-1.5">
                   Ollama must allow this extension's origin. Start it with:
-                  <code className="block mt-1 bg-gray-800/80 rounded px-2 py-1 text-gray-400">
+                  <code className="block mt-1 font-mono bg-surface rounded px-2 py-1 text-muted">
                     OLLAMA_ORIGINS=chrome-extension://* ollama serve
                   </code>
                 </p>
@@ -300,13 +299,13 @@ export default function Settings({ open, onClose }: SettingsProps) {
         </div>
 
         {/* Save */}
-        <div className="p-5 border-t border-gray-800/60">
+        <div className="p-5 border-t border-hairline">
           <button
             onClick={handleSave}
             disabled={isPending}
-            className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-semibold rounded-xl transition-all shadow-lg shadow-indigo-900/30"
+            className="w-full py-2.5 bg-accent hover:bg-accent/90 disabled:opacity-50 text-white font-semibold rounded-xl transition-colors"
           >
-            {saved ? "✓ Saved!" : isPending ? "Saving…" : "Save Settings"}
+            {saved ? "Saved" : isPending ? "Saving…" : "Save Settings"}
           </button>
         </div>
       </aside>
