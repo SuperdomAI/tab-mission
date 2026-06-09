@@ -1,6 +1,6 @@
 # Architecture & Technical Reference
 
-A deep-dive into how Tab Mission Control is built — data model, data flow, component responsibilities, storage schema, and key implementation decisions.
+A deep-dive into how Tab Mission is built — data model, data flow, component responsibilities, storage schema, and key implementation decisions.
 
 > **Source of truth:** when this document and the code disagree, the code wins. `src/types/index.ts` is authoritative for the data model.
 

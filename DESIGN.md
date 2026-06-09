@@ -1,4 +1,4 @@
-# Design System — Tab Mission Control
+# Design System — Tab Mission
 
 > The one thing someone should remember after first opening this: **calm command of the chaos.** A surface seen dozens of times a day must be quiet, recognizable, and physical — not a wall of data rows. Every decision below serves that.
 

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "Tab Mission Control",
-  "short_name": "Tab MC",
+  "name": "Tab Mission",
+  "short_name": "Tab Mission",
   "version": "1.1.0",
   "description": "Take command of your browser tabs. Spatial decks, a Timeline view, a ⌘K command palette, goal-driven Workspaces, and optional local-AI — all from your new tab page.",
   "permissions": ["tabs", "windows", "storage", "idle", "alarms", "tabGroups", "favicon", "declarativeNetRequestWithHostAccess"],
@@ -15,7 +15,7 @@
     "newtab": "src/newtab/index.html"
   },
   "action": {
-    "default_title": "Tab Mission Control"
+    "default_title": "Tab Mission"
   },
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' http://localhost:11434 http://127.0.0.1:11434"

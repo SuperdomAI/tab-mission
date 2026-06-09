@@ -1,5 +1,5 @@
 {
-  "name": "tab-mission-control",
+  "name": "tab-mission",
   "version": "1.1.0",
   "description": "A Chrome extension that replaces your new tab page with a clean, powerful tab management dashboard — domain grouping, fuzzy search, session saving, and usage analytics.",
   "type": "module",
@@ -20,15 +20,15 @@
     "session-manager",
     "manifest-v3"
   ],
-  "author": "Tab Mission Control Contributors",
+  "author": "Tab Mission Contributors",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/YOUR_USERNAME/tab-mission-control.git"
+    "url": "https://github.com/YOUR_USERNAME/tab-mission.git"
   },
-  "homepage": "https://github.com/YOUR_USERNAME/tab-mission-control#readme",
+  "homepage": "https://github.com/YOUR_USERNAME/tab-mission#readme",
   "bugs": {
-    "url": "https://github.com/YOUR_USERNAME/tab-mission-control/issues"
+    "url": "https://github.com/YOUR_USERNAME/tab-mission/issues"
   },
   "dependencies": {
     "cmdk": "^1.1.1",

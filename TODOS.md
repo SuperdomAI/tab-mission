@@ -1,6 +1,6 @@
 # TODOS
 
-Deferred work for Tab Mission Control. Captured during the Phase 1 eng review (2026-06-06).
+Deferred work for Tab Mission. Captured during the Phase 1 eng review (2026-06-06).
 
 ## E2E smoke for destructive flows
 - **What:** Playwright + load-unpacked extension smoke covering close-one, close-all, hibernate-all, save+restore, clear-forgotten.
