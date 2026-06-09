@@ -13,6 +13,7 @@ import SessionManager from "./components/SessionManager";
 import AnalyticsDashboard from "./components/AnalyticsDashboard";
 import Settings from "./components/Settings";
 import Tooltip from "./components/Tooltip";
+import superdomLogo from "../assets/superdom-logo.svg";
 
 // Swap this one-liner anytime — it shows in the footer next to the credit.
 const FOOTER_TAGLINE = "Rescuing your RAM, one tab at a time.";
@@ -121,8 +122,14 @@ export default function App() {
           href="https://superdom.ai"
           target="_blank"
           rel="noopener noreferrer"
-          className="text-[12px] text-muted hover:text-accent transition-colors"
+          className="inline-flex items-center gap-1.5 text-[12px] text-muted hover:text-accent transition-colors"
         >
+          <img
+            src={superdomLogo}
+            alt=""
+            aria-hidden="true"
+            className="h-3.5 w-3.5 shrink-0"
+          />
           Built by SuperdomAI ↗
         </a>
         <div className="flex-1" />
