@@ -16,6 +16,11 @@ export interface ChromeMock {
     update: ReturnType<typeof vi.fn>;
     query: ReturnType<typeof vi.fn>;
     create: ReturnType<typeof vi.fn>;
+    duplicate: ReturnType<typeof vi.fn>;
+  };
+  sessions: {
+    getRecentlyClosed: ReturnType<typeof vi.fn>;
+    restore: ReturnType<typeof vi.fn>;
   };
   windows: {
     update: ReturnType<typeof vi.fn>;
@@ -57,6 +62,11 @@ export function makeChromeMock(): ChromeMock {
       update: vi.fn().mockResolvedValue({}),
       query: vi.fn().mockResolvedValue([]),
       create: vi.fn().mockResolvedValue({ id: 999 }),
+      duplicate: vi.fn().mockResolvedValue({ id: 1000 }),
+    },
+    sessions: {
+      getRecentlyClosed: vi.fn().mockResolvedValue([]),
+      restore: vi.fn().mockResolvedValue({}),
     },
     windows: {
       update: vi.fn().mockResolvedValue({}),

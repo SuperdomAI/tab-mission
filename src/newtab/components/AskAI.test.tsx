@@ -74,7 +74,7 @@ describe("AskAI sidebar", () => {
     await sendMessage("hi");
     const port = await waitForPort(0);
     const body = requestBody(port);
-    expect(body.tools).toHaveLength(9);
+    expect(body.tools).toHaveLength(15);
     expect(body.messages[0]).toMatchObject({ role: "system" });
     expect(body.messages[0].content).toContain("Video (youtube.com)");
     expect(body.messages[0].content).not.toContain("tabId");
@@ -755,5 +755,213 @@ describe("AskAI sidebar", () => {
 
     driveStream(port2, [{ message: { content: "ok" } }]);
     await waitFor(() => expect(screen.getByText("ok")).toBeInTheDocument());
+  });
+});
+
+describe("AskAI extra agentic tools", () => {
+  it("executes a muteTab tool call via tabs.update and confirms", async () => {
+    renderAskAI();
+    await sendMessage("mute the video tab");
+    const port = await waitForPort(0);
+    driveStream(port, [
+      {
+        message: {
+          tool_calls: [
+            { function: { name: "muteTab", arguments: '{"title":"Video"}' } },
+          ],
+        },
+      },
+    ]);
+    await waitFor(() =>
+      expect(chromeMock().tabs.update).toHaveBeenCalledWith(1, { muted: true }),
+    );
+    const body2 = requestBody(await waitForPort(1));
+    expect(body2.messages.at(-1)).toMatchObject({
+      role: "tool",
+      content: "muteTab: muted — Video",
+    });
+    driveStream(await waitForPort(1), [{ message: { content: "Muted." } }]);
+  });
+
+  it("executes an unmuteTab tool call via tabs.update", async () => {
+    renderAskAI();
+    await sendMessage("unmute the video tab");
+    const port = await waitForPort(0);
+    driveStream(port, [
+      {
+        message: {
+          tool_calls: [
+            { function: { name: "unmuteTab", arguments: '{"title":"Video"}' } },
+          ],
+        },
+      },
+    ]);
+    await waitFor(() =>
+      expect(chromeMock().tabs.update).toHaveBeenCalledWith(1, { muted: false }),
+    );
+    driveStream(await waitForPort(1), [{ message: { content: "Unmuted." } }]);
+  });
+
+  it("executes a closeOtherTabs tool call — keeps the named tab, closes the rest", async () => {
+    useTabStore.setState({
+      tabs: [
+        makeTab({ id: 1, title: "Inbox", domain: "mail.google.com" }),
+        makeTab({ id: 2, title: "Video", domain: "youtube.com" }),
+        makeTab({ id: 3, title: "Pinned", domain: "x.com", isPinned: true }),
+      ],
+    });
+    const { onClosed } = renderAskAI();
+    await sendMessage("close everything except inbox");
+    const port = await waitForPort(0);
+    driveStream(port, [
+      {
+        message: {
+          tool_calls: [
+            { function: { name: "closeOtherTabs", arguments: '{"title":"Inbox"}' } },
+          ],
+        },
+      },
+    ]);
+    await waitFor(() =>
+      expect(chromeMock().tabs.remove).toHaveBeenCalledWith([2]),
+    );
+    expect(onClosed).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "Video" }),
+    );
+    const body2 = requestBody(await waitForPort(1));
+    expect(body2.messages.at(-1)).toMatchObject({
+      role: "tool",
+      content: expect.stringContaining('closeOtherTabs: kept "Inbox"'),
+    });
+    driveStream(await waitForPort(1), [{ message: { content: "Decluttered." } }]);
+  });
+
+  it("executes a duplicateTab tool call via tabs.duplicate — nothing closed", async () => {
+    renderAskAI();
+    await sendMessage("duplicate the video tab");
+    const port = await waitForPort(0);
+    driveStream(port, [
+      {
+        message: {
+          tool_calls: [
+            { function: { name: "duplicateTab", arguments: '{"title":"Video"}' } },
+          ],
+        },
+      },
+    ]);
+    await waitFor(() => expect(chromeMock().tabs.duplicate).toHaveBeenCalledWith(1));
+    expect(chromeMock().tabs.remove).not.toHaveBeenCalled();
+    const body2 = requestBody(await waitForPort(1));
+    expect(body2.messages.at(-1)).toMatchObject({
+      role: "tool",
+      content: "duplicateTab: duplicated — Video",
+    });
+    driveStream(await waitForPort(1), [{ message: { content: "Duplicated." } }]);
+  });
+
+  it("executes a reopenClosedTab tool call via sessions.restore", async () => {
+    (chromeMock().sessions.getRecentlyClosed as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { lastModified: 2, window: { sessionId: "w1" } },
+      { lastModified: 1, tab: { sessionId: "t1", title: "Video", url: "https://youtube.com/" } },
+    ]);
+    renderAskAI();
+    await sendMessage("reopen the tab I just closed");
+    const port = await waitForPort(0);
+    driveStream(port, [
+      {
+        message: {
+          tool_calls: [
+            { function: { name: "reopenClosedTab", arguments: "{}" } },
+          ],
+        },
+      },
+    ]);
+    await waitFor(() =>
+      expect(chromeMock().sessions.restore).toHaveBeenCalledWith("t1"),
+    );
+    const body2 = requestBody(await waitForPort(1));
+    expect(body2.messages.at(-1)).toMatchObject({
+      role: "tool",
+      content: "reopenClosedTab: reopened — Video",
+    });
+    driveStream(await waitForPort(1), [{ message: { content: "Reopened." } }]);
+  });
+
+  it("refuses reopenClosedTab without the sessions grant — nothing restores", async () => {
+    (chromeMock().permissions.contains as ReturnType<typeof vi.fn>).mockImplementation(
+      (p: { permissions?: string[] }) =>
+        Promise.resolve(!(p?.permissions ?? []).includes("sessions")),
+    );
+    renderAskAI();
+    await sendMessage("reopen the tab I just closed");
+    const port = await waitForPort(0);
+    driveStream(port, [
+      {
+        message: {
+          tool_calls: [
+            { function: { name: "reopenClosedTab", arguments: "{}" } },
+          ],
+        },
+      },
+    ]);
+    const body2 = requestBody(await waitForPort(1));
+    expect(body2.messages.at(-1)).toMatchObject({
+      role: "tool",
+      content: expect.stringContaining('enable "Reopen Closed Tabs" in Settings'),
+    });
+    expect(chromeMock().sessions.restore).not.toHaveBeenCalled();
+    driveStream(await waitForPort(1), [{ message: { content: "OK." } }]);
+  });
+
+  it("executes a copyTabUrls tool call — clipboard gets Title — URL lines", async () => {
+    renderAskAI();
+    await sendMessage("copy all my tabs");
+    const port = await waitForPort(0);
+    driveStream(port, [
+      {
+        message: {
+          tool_calls: [
+            { function: { name: "copyTabUrls", arguments: "{}" } },
+          ],
+        },
+      },
+    ]);
+    await waitFor(() =>
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+        "Video — https://example.com/1",
+      ),
+    );
+    const body2 = requestBody(await waitForPort(1));
+    expect(body2.messages.at(-1)).toMatchObject({
+      role: "tool",
+      content: "copyTabUrls: copied 1 link(s) to the clipboard",
+    });
+    driveStream(await waitForPort(1), [{ message: { content: "Copied." } }]);
+  });
+
+  it("refuses copyTabUrls without the clipboard grant — nothing written", async () => {
+    (chromeMock().permissions.contains as ReturnType<typeof vi.fn>).mockImplementation(
+      (p: { permissions?: string[] }) =>
+        Promise.resolve(!(p?.permissions ?? []).includes("clipboardWrite")),
+    );
+    renderAskAI();
+    await sendMessage("copy my tabs");
+    const port = await waitForPort(0);
+    driveStream(port, [
+      {
+        message: {
+          tool_calls: [
+            { function: { name: "copyTabUrls", arguments: "{}" } },
+          ],
+        },
+      },
+    ]);
+    const body2 = requestBody(await waitForPort(1));
+    expect(body2.messages.at(-1)).toMatchObject({
+      role: "tool",
+      content: expect.stringContaining('enable "Copy Tab Links" in Settings'),
+    });
+    expect(navigator.clipboard.writeText).not.toHaveBeenCalled();
+    driveStream(await waitForPort(1), [{ message: { content: "OK." } }]);
   });
 });

@@ -7,6 +7,14 @@ import {
   requestPageReadingPermission,
   revokePageReadingPermission,
 } from "../../lib/pageReading";
+import {
+  requestReopenPermission,
+  revokeReopenPermission,
+} from "../../lib/ai/reopen";
+import {
+  requestClipboardPermission,
+  revokeClipboardPermission,
+} from "../../lib/clipboard";
 import Switch from "./Switch";
 
 interface SettingsProps {
@@ -22,6 +30,8 @@ export default function Settings({ open, onClose }: SettingsProps) {
   const [saved, setSaved] = useState(false);
   const [aiStatus, setAiStatus] = useState("");
   const [pageStatus, setPageStatus] = useState("");
+  const [reopenStatus, setReopenStatus] = useState("");
+  const [clipboardStatus, setClipboardStatus] = useState("");
 
   // F6 — "Read pages for AI" requests the optional `scripting` + <all_urls>
   // host grants at this explicit opt-in moment, and revokes them on opt-out
@@ -42,6 +52,42 @@ export default function Settings({ open, onClose }: SettingsProps) {
       setPageStatus("");
     }
     update("aiPageReadingEnabled", next);
+  }
+
+  // Ask AI "reopen closed tab" — optional `sessions` grant, F6-style opt-in.
+  async function toggleReopen() {
+    const next = !local.aiReopenEnabled;
+    if (next) {
+      setReopenStatus("Requesting recently-closed-tabs permission…");
+      const granted = await requestReopenPermission();
+      if (!granted) {
+        setReopenStatus("Permission denied — reopening stays off.");
+        return;
+      }
+      setReopenStatus("Enabled — Ask AI can reopen recently closed tabs (revocable anytime).");
+    } else {
+      await revokeReopenPermission();
+      setReopenStatus("");
+    }
+    update("aiReopenEnabled", next);
+  }
+
+  // Ask AI "copy tab links" — optional `clipboardWrite` grant, F6-style opt-in.
+  async function toggleClipboard() {
+    const next = !local.aiClipboardEnabled;
+    if (next) {
+      setClipboardStatus("Requesting clipboard permission…");
+      const granted = await requestClipboardPermission();
+      if (!granted) {
+        setClipboardStatus("Permission denied — copying stays off.");
+        return;
+      }
+      setClipboardStatus("Enabled — Ask AI can copy tab links (revocable anytime).");
+    } else {
+      await revokeClipboardPermission();
+      setClipboardStatus("");
+    }
+    update("aiClipboardEnabled", next);
   }
 
   async function toggleOllama() {
@@ -396,6 +442,52 @@ export default function Settings({ open, onClose }: SettingsProps) {
                 </div>
                 {pageStatus && (
                   <p className="text-xs text-accent mt-1.5">{pageStatus}</p>
+                )}
+
+                {/* Reopen closed tabs (Ask AI) */}
+                <div className="mt-3 flex items-center justify-between">
+                  <div>
+                    <label className={labelClass + " mb-0"}>
+                      Reopen Closed Tabs for AI
+                    </label>
+                    <p className="text-xs text-faint mt-0.5">
+                      Lets Ask AI reopen a tab you just closed (optional, off
+                      by default). Requests access to recently closed tabs on
+                      first use and can be revoked here or in
+                      chrome://extensions.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={local.aiReopenEnabled}
+                    onChange={() => void toggleReopen()}
+                    label="Reopen closed tabs"
+                  />
+                </div>
+                {reopenStatus && (
+                  <p className="text-xs text-accent mt-1.5">{reopenStatus}</p>
+                )}
+
+                {/* Copy tab links (Ask AI) */}
+                <div className="mt-3 flex items-center justify-between">
+                  <div>
+                    <label className={labelClass + " mb-0"}>
+                      Copy Tab Links for AI
+                    </label>
+                    <p className="text-xs text-faint mt-0.5">
+                      Lets Ask AI copy your open tabs' titles and URLs to the
+                      clipboard (optional, off by default). Requests
+                      clipboard access on first use and can be revoked here
+                      or in chrome://extensions.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={local.aiClipboardEnabled}
+                    onChange={() => void toggleClipboard()}
+                    label="Copy tab links"
+                  />
+                </div>
+                {clipboardStatus && (
+                  <p className="text-xs text-accent mt-1.5">{clipboardStatus}</p>
                 )}
 
                 {/* Per-feature toggles */}
