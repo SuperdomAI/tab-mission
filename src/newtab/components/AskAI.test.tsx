@@ -279,4 +279,35 @@ describe("AskAI sidebar", () => {
       (screen.getByPlaceholderText("Ask about your tabs…") as HTMLInputElement).value,
     ).toBe("");
   });
+
+  it("keeps the suggestion chips visible after a question — with a label once the chat started", async () => {
+    renderAskAI();
+    await sendMessage("hi");
+    const port = await waitForPort(0);
+    // while streaming the chips are hidden so the thread doesn't shift
+    expect(screen.queryByText(/Which tabs can I safely close/)).toBeNull();
+
+    driveStream(port, [{ message: { content: "Hello!" } }]);
+    await waitFor(() => expect(screen.getByText("Hello!")).toBeInTheDocument());
+    expect(screen.getByText("More you can ask")).toBeInTheDocument();
+    expect(screen.getByText(/Which tabs can I safely close/)).toBeInTheDocument();
+  });
+
+  it("suggestion chips stay clickable mid-conversation (auto-submit a second question)", async () => {
+    renderAskAI();
+    await sendMessage("hi");
+    const port = await waitForPort(0);
+    driveStream(port, [{ message: { content: "Hello!" } }]);
+    await waitFor(() => expect(screen.getByText("Hello!")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText(/Which tabs can I safely close/));
+    await waitFor(() =>
+      expect(chromeMock().runtime.connect).toHaveBeenCalledTimes(2),
+    );
+    // the second user bubble appears without a Send click
+    expect(screen.getByText("Which tabs can I safely close?")).toBeInTheDocument();
+    expect(
+      (screen.getByPlaceholderText("Ask about your tabs…") as HTMLInputElement).value,
+    ).toBe("");
+  });
 });
