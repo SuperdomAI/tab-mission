@@ -2,12 +2,15 @@ import { describe, it, expect } from "vitest";
 import {
   CLOSE_TAB_TOOL,
   HIBERNATE_TAB_TOOL,
+  OPEN_TAB_TOOL,
   closeResultText,
   detectCloseProposals,
   detectHibernateProposals,
   extractCloseTitles,
   extractHibernateTitles,
+  openResultText,
   resolveCloseTarget,
+  resolveOpenUrl,
 } from "./chatTools";
 import { makeTab } from "../../test/factory";
 
@@ -25,6 +28,78 @@ describe("HIBERNATE_TAB_TOOL", () => {
     expect(HIBERNATE_TAB_TOOL.function.name).toBe("hibernateTab");
     expect(HIBERNATE_TAB_TOOL.function.parameters.required).toEqual(["title"]);
     expect(HIBERNATE_TAB_TOOL.function.name).not.toBe(CLOSE_TAB_TOOL.function.name);
+  });
+});
+
+describe("OPEN_TAB_TOOL", () => {
+  it("is an Ollama-style function tool requiring a url", () => {
+    expect(OPEN_TAB_TOOL.type).toBe("function");
+    expect(OPEN_TAB_TOOL.function.name).toBe("openTab");
+    expect(OPEN_TAB_TOOL.function.parameters.required).toEqual(["url"]);
+  });
+});
+
+describe("resolveOpenUrl", () => {
+  it("accepts a full https URL", () => {
+    expect(resolveOpenUrl({ url: "https://google.com" })).toEqual({
+      url: "https://google.com",
+    });
+    expect(resolveOpenUrl({ url: "http://localhost:11434/api" })).toEqual({
+      url: "http://localhost:11434/api",
+    });
+  });
+
+  it("prepends https:// to bare domains", () => {
+    expect(resolveOpenUrl({ url: "google.com" })).toEqual({ url: "https://google.com" });
+    expect(resolveOpenUrl({ url: "www.example.com/path?q=1" })).toEqual({
+      url: "https://www.example.com/path?q=1",
+    });
+  });
+
+  it("refuses non-http schemes", () => {
+    expect(resolveOpenUrl({ url: "javascript:alert(1)" })).toEqual({
+      error: "invalid-url",
+    });
+    expect(resolveOpenUrl({ url: "chrome://settings" })).toEqual({
+      error: "invalid-url",
+    });
+    expect(resolveOpenUrl({ url: "file:///etc/passwd" })).toEqual({
+      error: "invalid-url",
+    });
+    expect(resolveOpenUrl({ url: "data:text/html,<h1>x</h1>" })).toEqual({
+      error: "invalid-url",
+    });
+  });
+
+  it("refuses a missing or non-string url", () => {
+    expect(resolveOpenUrl({})).toEqual({ error: "missing-url" });
+    expect(resolveOpenUrl({ url: "" })).toEqual({ error: "missing-url" });
+    expect(resolveOpenUrl({ url: 12 })).toEqual({ error: "missing-url" });
+    expect(resolveOpenUrl("garbage")).toEqual({ error: "missing-url" });
+  });
+
+  it("refuses URLs that don't parse", () => {
+    expect(resolveOpenUrl({ url: "https://" })).toEqual({ error: "invalid-url" });
+    expect(resolveOpenUrl({ url: "https://google com" })).toEqual({
+      error: "invalid-url",
+    });
+  });
+});
+
+describe("openResultText", () => {
+  it("reports the opened URL", () => {
+    expect(openResultText({ url: "https://google.com" })).toBe(
+      "openTab: opened — https://google.com",
+    );
+  });
+
+  it("explains each refusal", () => {
+    expect(openResultText({ error: "missing-url" })).toBe(
+      "openTab: no URL given — nothing opened",
+    );
+    expect(openResultText({ error: "invalid-url" })).toBe(
+      "openTab: invalid URL — nothing opened",
+    );
   });
 });
 

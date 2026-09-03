@@ -11,13 +11,17 @@ import {
 import {
   CLOSE_TAB_TOOL,
   HIBERNATE_TAB_TOOL,
+  OPEN_TAB_TOOL,
   closeResultText,
   detectCloseProposals,
   detectHibernateProposals,
+  openResultText,
   resolveCloseTarget,
+  resolveOpenUrl,
   type CloseProposal,
 } from "../../lib/ai/chatTools";
 import { cleanAssistantText } from "../../lib/ai/chatText";
+import Tooltip from "./Tooltip";
 import type { EnrichedTab } from "../../types/index";
 
 interface AskAIProps {
@@ -65,6 +69,7 @@ export default function AskAI({ open, onClose, onOpenSettings, onClosed }: AskAI
   const [proposals, setProposals] = useState<CloseProposal[]>([]);
   const [hibernateProposals, setHibernateProposals] = useState<CloseProposal[]>([]);
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
+  const chatResetRef = useRef(false);
   const ctrlRef = useRef<AbortController | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -150,12 +155,15 @@ const system = useCallback(
           "When the user asks you to hibernate, discard, unload, or save memory on a tab, call the " +
           "hibernateTab tool (same exact-title rule) — never closeTab for a hibernate request, the tab must " +
           "stay open. Replying \"Hibernated ...\" without calling hibernateTab is a lie, never do it. " +
+          "When the user asks you to open or visit a website, call the openTab tool with a full URL " +
+          "(https://...), e.g. openTab { url: \"https://google.com\" } — only http/https URLs open. " +
           "Never invent a tab title: only mention or act on tabs that appear in the list below. " +
           "Use the exact title only, without the domain in parentheses. Do not announce the call or show the " +
           "tool name in your reply. After the tool runs you will receive its result and should reply with one " +
           'short confirmation sentence, e.g. "Closed the Inbox tab."\n' +
           "Example: user: \"close the inbox tab\" → assistant calls closeTab with title \"Inbox\", then confirms.\n" +
           "Example: user: \"hibernate the video tab\" → assistant calls hibernateTab with title \"Video\", then confirms.\n" +
+          "Example: user: \"open google\" → assistant calls openTab with url \"https://google.com\", then confirms.\n" +
           `Never close or hibernate a pinned tab. Open tabs:\n${lines}`,
       } as const;
     },
@@ -165,6 +173,18 @@ const system = useCallback(
   const append = useCallback((msg: ChatMessageFull) => {
     setMessages((prev) => [...prev, msg]);
   }, []);
+
+  /** New chat — clear the thread (and the model's context window). */
+  function newChat() {
+    chatResetRef.current = true;
+    ctrlRef.current?.abort();
+    setMessages([]);
+    setDraft("");
+    setPendingText("");
+    setProposals([]);
+    setHibernateProposals([]);
+    setToolsOff(false);
+  }
 
   async function send(text: string) {
     if (!text.trim() || streaming) return;
@@ -201,7 +221,7 @@ const system = useCallback(
         await streamChat({
           messages: [system(useTabStore.getState().tabs), ...conv],
           model: settings.aiChatModel,
-          tools: [CLOSE_TAB_TOOL, HIBERNATE_TAB_TOOL],
+          tools: [CLOSE_TAB_TOOL, HIBERNATE_TAB_TOOL, OPEN_TAB_TOOL],
           signal: ctrl.signal,
           onDelta: (d) => {
             acc += d;
@@ -210,7 +230,8 @@ const system = useCallback(
           onToolCall: (name, args) => {
             if (
               name === CLOSE_TAB_TOOL.function.name ||
-              name === HIBERNATE_TAB_TOOL.function.name
+              name === HIBERNATE_TAB_TOOL.function.name ||
+              name === OPEN_TAB_TOOL.function.name
             ) {
               toolCalls.push({ name, arguments: JSON.stringify(args) });
             }
@@ -243,7 +264,9 @@ const system = useCallback(
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      if (ctrl.signal.aborted) {
+      if (chatResetRef.current) {
+        chatResetRef.current = false; // newChat() aborted — the fresh thread stays empty
+      } else if (ctrl.signal.aborted) {
         append({ role: "assistant", content: "Stopped." });
       } else {
         const hint = /404/.test(msg)
@@ -269,7 +292,13 @@ const system = useCallback(
         args = call.arguments;
       }
       const target = resolveCloseTarget(args, live);
-      if (call.name === HIBERNATE_TAB_TOOL.function.name) {
+      if (call.name === OPEN_TAB_TOOL.function.name) {
+        const open = resolveOpenUrl(args);
+        if ("url" in open) {
+          void chrome.tabs.create({ url: open.url, active: true });
+        }
+        results.push(openResultText(open));
+      } else if (call.name === HIBERNATE_TAB_TOOL.function.name) {
         // Discard is reversible — no undo toast, no onClosed.
         if ("tabs" in target && target.tabs.length > 0) {
           void hibernateMany(target.tabs);
@@ -351,6 +380,26 @@ const system = useCallback(
             <span className="hidden sm:inline font-mono text-[10px] text-faint truncate max-w-[120px]">
               {settings.aiChatModel}
             </span>
+            <Tooltip text="New chat — clears the conversation and the model's context">
+              <button
+                onClick={newChat}
+                aria-label="New chat"
+                className="w-7 h-7 grid place-items-center rounded-[7px] text-faint hover:text-ink border border-border"
+              >
+                <svg
+                  className="w-3.5 h-3.5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  strokeWidth={2}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M3 12a9 9 0 1 0 2.64-6.36" />
+                  <polyline points="3 3 3 9 9 9" />
+                </svg>
+              </button>
+            </Tooltip>
             <button
               onClick={onClose}
               aria-label="Close"
@@ -381,7 +430,7 @@ const system = useCallback(
             <>
               {messages.length === 0 && (
                 <p className="text-[13px] text-faint">
-                  Ask about your open tabs, or let me close some for you.
+                  Ask about your open tabs, or let me close, hibernate, or open sites for you.
                 </p>
               )}
 

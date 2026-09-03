@@ -273,7 +273,7 @@ Store updates that flow from `chrome.storage.onChanged` are wrapped in `startTra
 | `TabRow`            | `tab, onJump, onClose, onSummarizeClose?` | `settings`   | — (summarize-close goes through `useReadingList`)              |
 | `SuggestionsStrip`  | `onFocus`          | `tabs, settings` + `useSuggestions` | `storage.local` write (`aiSuggestions`), Ollama via `bgFetch` |
 | `CommandPalette`    | `onFocus, onOpenWorkspaces, onAskAI` | `tabs, settings, sessions` + `useSessionSummaries` + `useTabEmbeddings` | `windows.create` (session restore), `tabs.update`, `windows.update`, `tabs.remove`, `tabs.discard`; `storage.local` write (`aiTabEmbeddings`), Ollama via `bgFetch` (embeddings) |
-| `AskAI` (sidebar)   | `open, onClose, onOpenSettings, onClosed` | `tabs, settings` + `useTabActions` | Ollama via the `ollama-stream` port (`streamChat`); `tabs.remove` ONLY through validated `closeTab` tool calls, `tabs.discard` ONLY through validated `hibernateTab` tool calls (`resolveCloseTarget` — pinned/unknown tabs are never touched); reopen on Undo via `tabs.create` (App toast) |
+| `AskAI` (sidebar)   | `open, onClose, onOpenSettings, onClosed` | `tabs, settings` + `useTabActions` | Ollama via the `ollama-stream` port (`streamChat`); `tabs.remove` ONLY through validated `closeTab` tool calls, `tabs.discard` ONLY through validated `hibernateTab` tool calls (`resolveCloseTarget` — pinned/unknown tabs are never touched), `tabs.create` ONLY through validated `openTab` calls (`resolveOpenUrl` — http/https only); "New chat" aborts + clears the thread; reopen on Undo via `tabs.create` (App toast) |
 | `Tooltip`            | `text, position?, align?` | —                    | —                                                              |
 
 ---
@@ -445,4 +445,4 @@ Implemented in `BulkActions.tsx`. Button counts and the zombie threshold both re
 - **`unvisitedAutoCloseEnabled`** — setting exists, background auto-close wiring not yet implemented
 - **WindowGroup view** — alternative grouping by window (not domain) not yet built
 - **Tab tagging** — `EnrichedTab.tags` renders as chips but has no add/edit UI
-- **Ask AI chat** — conversation history is in-memory (lost when the new-tab page reloads), and the tool set is `closeTab` + `hibernateTab` only (group tools are a natural extension); token-level streaming works through the SW port, but there is no AI-Elements-style part rendering yet
+- **Ask AI chat** — conversation history is in-memory (lost when the new-tab page reloads; "New chat" clears it), and the tool set is `closeTab` + `hibernateTab` + `openTab` (jump/group/save-session tools are natural extensions); token-level streaming works through the SW port, but there is no AI-Elements-style part rendering yet

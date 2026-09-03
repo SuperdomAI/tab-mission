@@ -56,6 +56,27 @@ export const HIBERNATE_TAB_TOOL = {
   },
 } as const;
 
+export const OPEN_TAB_TOOL = {
+  type: "function",
+  function: {
+    name: "openTab",
+    description:
+      "Open a new browser tab with the given http/https URL (e.g. \"https://google.com\"). " +
+      "Use this when the user asks to open, navigate to, or visit a website. " +
+      "Only http/https URLs are allowed — never other schemes. This never closes or hibernates anything.",
+    parameters: {
+      type: "object",
+      properties: {
+        url: {
+          type: "string",
+          description: "A full URL starting with https:// (or http://).",
+        },
+      },
+      required: ["url"],
+    },
+  },
+} as const;
+
 export type CloseTarget =
   | { tabs: EnrichedTab[]; skippedPinned: number }
   | { error: "missing-title" | "no-match" };
@@ -173,6 +194,41 @@ export function detectCloseProposals(text: string, tabs: EnrichedTab[]): ClosePr
     }
   }
   return out;
+}
+
+// ─── open-URL tool (agentic browse — open a website, nothing destructive) ────
+
+export type OpenTarget = { url: string } | { error: "missing-url" | "invalid-url" };
+
+/**
+ * Validate a model-produced `openTab` call. Bare domains get `https://`
+ * prepended (models rarely pass the scheme); anything that isn't a valid
+ * http/https URL — javascript:, chrome:, data:, garbage — is refused.
+ * Opening is benign, so this is the only gate: no tab-store lookups.
+ */
+export function resolveOpenUrl(args: unknown): OpenTarget {
+  const obj = typeof args === "object" && args !== null ? (args as Record<string, unknown>) : null;
+  const raw = obj?.url;
+  if (typeof raw !== "string" || raw.trim() === "") return { error: "missing-url" };
+  let url = raw.trim();
+  if (!/^[a-z][a-z0-9+.-]*:/i.test(url)) url = `https://${url}`;
+  if (!/^https?:\/\//i.test(url)) return { error: "invalid-url" };
+  try {
+    new URL(url);
+  } catch {
+    return { error: "invalid-url" };
+  }
+  return { url };
+}
+
+/** Human summary of an open-tab result, for the tool card in the thread. */
+export function openResultText(result: OpenTarget): string {
+  if ("error" in result) {
+    return result.error === "missing-url"
+      ? "openTab: no URL given — nothing opened"
+      : "openTab: invalid URL — nothing opened";
+  }
+  return `openTab: opened — ${result.url}`;
 }
 
 // ─── hibernate claims (parallel to close — same rules, different tool) ───────

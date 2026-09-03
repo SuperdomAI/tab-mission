@@ -74,7 +74,7 @@ describe("AskAI sidebar", () => {
     await sendMessage("hi");
     const port = await waitForPort(0);
     const body = requestBody(port);
-    expect(body.tools).toHaveLength(2);
+    expect(body.tools).toHaveLength(3);
     expect(body.messages[0]).toMatchObject({ role: "system" });
     expect(body.messages[0].content).toContain("Video (youtube.com)");
     expect(body.messages[0].content).not.toContain("tabId");
@@ -371,5 +371,98 @@ describe("AskAI sidebar", () => {
     expect(chromeMock().tabs.remove).not.toHaveBeenCalled();
     expect(onClosed).not.toHaveBeenCalled();
     expect(screen.queryByText(/Hibernate · Video/)).toBeNull();
+  });
+
+  it("executes an openTab tool call via tabs.create — active tab, nothing destructive", async () => {
+    const { onClosed } = renderAskAI();
+    await sendMessage("open google.com");
+    const port = await waitForPort(0);
+    driveStream(port, [
+      {
+        message: {
+          tool_calls: [
+            { function: { name: "openTab", arguments: '{"url":"google.com"}' } },
+          ],
+        },
+      },
+    ]);
+
+    await waitFor(() =>
+      expect(chromeMock().tabs.create).toHaveBeenCalledWith({
+        url: "https://google.com",
+        active: true,
+      }),
+    );
+    expect(chromeMock().tabs.remove).not.toHaveBeenCalled();
+    expect(chromeMock().tabs.discard).not.toHaveBeenCalled();
+    expect(onClosed).not.toHaveBeenCalled();
+
+    await waitFor(() =>
+      expect(chromeMock().runtime.connect).toHaveBeenCalledTimes(2),
+    );
+    const body2 = requestBody(await waitForPort(1));
+    expect(body2.messages.at(-1)).toMatchObject({
+      role: "tool",
+      content: "openTab: opened — https://google.com",
+    });
+    driveStream(await waitForPort(1), [{ message: { content: "Opened Google." } }]);
+    await waitFor(() => expect(screen.getByText("Opened Google.")).toBeInTheDocument());
+  });
+
+  it("refuses a dangerous openTab URL (no tabs created)", async () => {
+    renderAskAI();
+    await sendMessage("open the settings page");
+    const port = await waitForPort(0);
+    driveStream(port, [
+      {
+        message: {
+          tool_calls: [
+            { function: { name: "openTab", arguments: '{"url":"chrome://settings"}' } },
+          ],
+        },
+      },
+    ]);
+    await waitFor(() =>
+      expect(chromeMock().runtime.connect).toHaveBeenCalledTimes(2),
+    );
+    expect(chromeMock().tabs.create).not.toHaveBeenCalled();
+    const body2 = requestBody(await waitForPort(1));
+    expect(body2.messages.at(-1)).toMatchObject({
+      role: "tool",
+      content: "openTab: invalid URL — nothing opened",
+    });
+    driveStream(await waitForPort(1), [{ message: { content: "Can't open that." } }]);
+  });
+
+  it("New chat clears the thread back to the empty state", async () => {
+    renderAskAI();
+    await sendMessage("hi");
+    const port = await waitForPort(0);
+    driveStream(port, [{ message: { content: "Hello!" } }]);
+    await waitFor(() => expect(screen.getByText("Hello!")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("button", { name: "New chat" }));
+    expect(screen.queryByText("Hello!")).toBeNull();
+    expect(screen.queryByText("hi")).toBeNull();
+    expect(
+      screen.getByText(/Ask about your open tabs/),
+    ).toBeInTheDocument();
+  });
+
+  it("New chat mid-stream aborts without leaving a Stopped message", async () => {
+    renderAskAI();
+    await sendMessage("long answer please");
+    const port = await waitForPort(0);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Stop" })).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("button", { name: "New chat" }));
+    listenerOf(port)({ type: "error", message: "aborted" });
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Stop" })).toBeNull(),
+    );
+    expect(screen.queryByText("Stopped.")).toBeNull();
+    expect(
+      screen.getByText(/Ask about your open tabs/),
+    ).toBeInTheDocument();
   });
 });
