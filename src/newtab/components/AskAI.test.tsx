@@ -701,4 +701,40 @@ describe("AskAI sidebar", () => {
       content: "readPage: couldn't read that page (restricted or unavailable) — nothing happened",
     });
   });
+
+  it("auto-compacts the transcript near the context budget — oldest turns dropped, note shown", async () => {
+    renderAskAI();
+    const big = "y".repeat(6500); // ~1625 tokens each
+
+    await sendMessage("first");
+    driveStream(await waitForPort(0), [{ message: { content: big } }]);
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Stop" })).toBeNull(),
+    );
+
+    await sendMessage("second");
+    driveStream(await waitForPort(1), [{ message: { content: big } }]);
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Stop" })).toBeNull(),
+    );
+
+    await sendMessage("third");
+    const port2 = await waitForPort(2);
+    const body = requestBody(port2);
+    // system prompt, then the compaction note, then the surviving tail
+    expect(body.messages[0]).toMatchObject({ role: "system" });
+    expect(body.messages[1]).toMatchObject({
+      role: "system",
+      content: expect.stringContaining("trimmed to fit the context window"),
+    });
+    expect(body.messages[2]).toMatchObject({ role: "user", content: "second" });
+    expect(body.messages.at(-1)).toMatchObject({ role: "user", content: "third" });
+    // the oldest turn is gone from the request
+    expect(body.messages.some((m) => m.content === "first")).toBe(false);
+    // the thread mirrors the trim
+    expect(screen.getByText(/earlier messages trimmed to fit the context/)).toBeInTheDocument();
+
+    driveStream(port2, [{ message: { content: "ok" } }]);
+    await waitFor(() => expect(screen.getByText("ok")).toBeInTheDocument());
+  });
 });

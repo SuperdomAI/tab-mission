@@ -33,7 +33,7 @@ import {
   type CloseProposal,
   type CloseTarget,
 } from "../../lib/ai/chatTools";
-import { cleanAssistantText } from "../../lib/ai/chatText";
+import { cleanAssistantText, compactMessages } from "../../lib/ai/chatText";
 import Tooltip from "./Tooltip";
 import { persistSession } from "../hooks/useTabActions";
 import { hasPageReadingPermission } from "../../lib/pageReading";
@@ -236,6 +236,14 @@ const system = useCallback(
     setPendingText("");
     try {
       let conv: ChatMessageFull[] = [...messages, userMsg];
+      // Context compaction: small local windows degrade on long transcripts.
+      // Drop the oldest turns once the estimate exceeds the budget, insert a
+      // system note, and mirror the trimmed thread in the UI.
+      const compacted = compactMessages(conv);
+      if (compacted.trimmed > 0) {
+        conv = compacted.messages;
+        setMessages(compacted.messages);
+      }
       for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
         const toolCalls: ToolCall[] = [];
         let acc = "";
@@ -700,6 +708,13 @@ function suggestPopoverStyle(rect: DOMRect): React.CSSProperties {
 
 /** One conversation row: user bubble, assistant bubble, or a tool-call card. */
 function MessageBubble({ msg }: { msg: ChatMessageFull }) {
+  if (msg.role === "system") {
+    return (
+      <p className="text-center font-mono text-[10px] text-faint leading-relaxed">
+        — earlier messages trimmed to fit the context —
+      </p>
+    );
+  }
   if (msg.role === "user") {
     return (
       <div className="text-[13px] leading-relaxed whitespace-pre-wrap rounded-[10px] px-3.5 py-2.5 bg-accent/15 text-ink ml-10">
