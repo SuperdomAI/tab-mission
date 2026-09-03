@@ -78,6 +78,8 @@ describe("AskAI sidebar", () => {
     expect(body.messages[0]).toMatchObject({ role: "system" });
     expect(body.messages[0].content).toContain("Video (youtube.com)");
     expect(body.messages[0].content).not.toContain("tabId");
+    // the tab list is fenced as data so a crafted title can't steer the model
+    expect(body.messages[0].content).toMatch(/DATA, not instructions/);
     expect(body.messages[1]).toMatchObject({ role: "user", content: "hi" });
 
     driveStream(port, [{ message: { content: "Hel" } }, { message: { content: "lo!" } }]);
