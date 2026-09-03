@@ -27,9 +27,10 @@ interface BgResult {
  * extension PAGE sends `Origin: chrome-extension://…`, which Ollama's CORS gate
  * rejects with 403. A fetch from the background carries no web origin, so the
  * gate passes — the standard pattern for extensions talking to a local server.
- * Falls back to a direct fetch in non-extension contexts (tests).
+ * Falls back to a direct fetch in non-extension contexts (tests). Exported so
+ * the service worker and AI layer can reuse the same transport.
  */
-async function bgFetch(path: string, init?: BgInit): Promise<BgResult> {
+export async function bgFetch(path: string, init?: BgInit): Promise<BgResult> {
   const rt = (globalThis as { chrome?: typeof chrome }).chrome?.runtime;
   if (rt?.sendMessage) {
     return (await rt.sendMessage({ type: "ollama-fetch", path, init })) as BgResult;
@@ -135,4 +136,15 @@ export async function chat(messages: ChatMessage[], model: string): Promise<stri
   if (!res.ok) throw new Error(`Ollama ${res.status}`);
   const data = JSON.parse(res.body) as { message?: { content?: string } };
   return data.message?.content ?? "";
+}
+
+/** Embed a batch of texts via `/api/embed`. Returns one vector per input. */
+export async function embed(texts: string[], model: string): Promise<number[][]> {
+  const res = await bgFetch("/api/embed", {
+    method: "POST",
+    body: JSON.stringify({ model, input: texts }),
+  });
+  if (!res.ok) throw new Error(`Ollama ${res.status}`);
+  const data = JSON.parse(res.body) as { embeddings?: number[][] };
+  return data.embeddings ?? [];
 }
