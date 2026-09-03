@@ -332,8 +332,9 @@ function normalize(title: string): string {
 /**
  * Validate a model-produced closeTab call against the live tab list.
  * `args` is whatever the model produced (already JSON-parsed object, or a
- * raw string when parsing failed). Only exact title matches pass; matches
- * on pinned tabs are reported (skippedPinned) but never closed.
+ * raw string when parsing failed). Only real open tabs ever match (see
+ * `matchTabsByTitle` — exact title plus suffix fallbacks); matches on pinned
+ * tabs are reported (skippedPinned) but never closed.
  */
 export function resolveCloseTarget(args: unknown, tabs: EnrichedTab[]): CloseTarget {
   const target = resolveTabTarget(args, tabs);
@@ -345,16 +346,49 @@ export function resolveCloseTarget(args: unknown, tabs: EnrichedTab[]): CloseTar
 }
 
 /**
- * Same exact-title resolution as `resolveCloseTarget`, but includes pinned
- * tabs in the result — for non-destructive tools (mute, duplicate) where a
- * pinned tab may be acted on.
+ * Tolerant title match used by every tool resolver. Tries, in order:
+ *  1. the exact title (after trim/lowercase);
+ *  2. the exact title after stripping a trailing "(domain)" the model may
+ *     have echoed from the tab list;
+ *  3. an unambiguous PREFIX match — the requested title is a strict prefix of
+ *     exactly ONE distinct open-tab title. Models routinely truncate a
+ *     trailing site suffix Chrome appends to titles (e.g. "World's Most
+ *     Beautiful 4K Video" for a tab titled "... 4K Video - YouTube"), so this
+ *     recovers the intended tab without ever inventing one. It refuses
+ *     (empty result) when two DIFFERENT tabs share the prefix.
+ * Only real open tabs are returned; nothing is invented.
+ */
+function matchTabsByTitle(title: string, tabs: EnrichedTab[]): EnrichedTab[] {
+  const wanted = normalize(title);
+  const exact = tabs.filter((t) => normalize(t.title) === wanted);
+  if (exact.length > 0) return exact;
+  const stripped = title.replace(/\s*\([^)]*\)\s*$/, "").trim();
+  if (stripped !== title) {
+    const strippedExact = tabs.filter((t) => normalize(t.title) === normalize(stripped));
+    if (strippedExact.length > 0) return strippedExact;
+  }
+  const prefix = normalize(stripped);
+  if (prefix.length >= 3) {
+    const prefixed = tabs.filter(
+      (t) => normalize(t.title).startsWith(prefix) && normalize(t.title) !== prefix,
+    );
+    if (prefixed.length > 0 && new Set(prefixed.map((t) => normalize(t.title))).size === 1) {
+      return prefixed;
+    }
+  }
+  return [];
+}
+
+/**
+ * Same tolerant resolution as `resolveCloseTarget`, but includes pinned tabs
+ * in the result — for non-destructive tools (mute, duplicate) where a pinned
+ * tab may be acted on.
  */
 export function resolveTabTarget(args: unknown, tabs: EnrichedTab[]): CloseTarget {
   const obj = typeof args === "object" && args !== null ? (args as Record<string, unknown>) : null;
   const title = obj?.title;
   if (typeof title !== "string" || title.trim() === "") return { error: "missing-title" };
-  const wanted = normalize(title);
-  const matches = tabs.filter((t) => normalize(t.title) === wanted);
+  const matches = matchTabsByTitle(title, tabs);
   if (matches.length === 0) return { error: "no-match" };
   return { tabs: matches, skippedPinned: 0 };
 }
@@ -422,16 +456,10 @@ export function extractCloseTitles(text: string): string[] {
   return out;
 }
 
-function titleCandidates(raw: string): string[] {
-  const exact = raw.trim();
-  const stripped = exact.replace(/\s*\([^)]*\)\s*$/, "").trim();
-  return stripped === exact ? [exact] : [exact, stripped];
-}
-
 /**
  * Resolve every close-claim in the assistant's text against the live tab
- * list. Exact titles win; a trailing "(domain)" suffix is tried as a second
- * candidate (models echo the list format "Title (domain)"). Pinned tabs are
+ * list (tolerant matching via `matchTabsByTitle` — exact, "(domain)"-stripped,
+ * unambiguous prefix). The chip shows the real open-tab title. Pinned tabs are
  * never proposed. Returns [] when nothing resolves — the UI shows no chip.
  */
 export function detectCloseProposals(text: string, tabs: EnrichedTab[]): CloseProposal[] {
@@ -440,12 +468,9 @@ export function detectCloseProposals(text: string, tabs: EnrichedTab[]): ClosePr
   for (const raw of extractCloseTitles(text)) {
     if (seen.has(raw)) continue;
     seen.add(raw);
-    for (const candidate of titleCandidates(raw)) {
-      const target = resolveCloseTarget({ title: candidate }, tabs);
-      if ("tabs" in target && target.tabs.length > 0) {
-        out.push({ title: candidate, tabIds: target.tabs.map((t) => t.id) });
-        break;
-      }
+    const target = resolveCloseTarget({ title: raw }, tabs);
+    if ("tabs" in target && target.tabs.length > 0) {
+      out.push({ title: target.tabs[0].title, tabIds: target.tabs.map((t) => t.id) });
     }
   }
   return out;
@@ -593,8 +618,8 @@ export function extractHibernateTitles(text: string): string[] {
 
 /**
  * Resolve every hibernate-claim in the assistant's text against the live tab
- * list (same rules as `detectCloseProposals`: exact title, "(domain)" second
- * candidate, pinned never proposed). Returns [] when nothing resolves.
+ * list (same rules as `detectCloseProposals`; chip shows the real tab title;
+ * pinned never proposed). Returns [] when nothing resolves.
  */
 export function detectHibernateProposals(text: string, tabs: EnrichedTab[]): CloseProposal[] {
   const seen = new Set<string>();
@@ -602,12 +627,9 @@ export function detectHibernateProposals(text: string, tabs: EnrichedTab[]): Clo
   for (const raw of extractHibernateTitles(text)) {
     if (seen.has(raw)) continue;
     seen.add(raw);
-    for (const candidate of titleCandidates(raw)) {
-      const target = resolveCloseTarget({ title: candidate }, tabs);
-      if ("tabs" in target && target.tabs.length > 0) {
-        out.push({ title: candidate, tabIds: target.tabs.map((t) => t.id) });
-        break;
-      }
+    const target = resolveCloseTarget({ title: raw }, tabs);
+    if ("tabs" in target && target.tabs.length > 0) {
+      out.push({ title: target.tabs[0].title, tabIds: target.tabs.map((t) => t.id) });
     }
   }
   return out;
@@ -628,7 +650,7 @@ export function resolveCloseOthersTarget(args: unknown, tabs: EnrichedTab[]): Cl
   const obj = typeof args === "object" && args !== null ? (args as Record<string, unknown>) : null;
   const title = obj?.title;
   if (typeof title !== "string" || title.trim() === "") return { error: "missing-title" };
-  const keep = tabs.filter((t) => normalize(t.title) === normalize(title));
+  const keep = matchTabsByTitle(title, tabs);
   if (keep.length === 0) return { error: "no-match" };
   const keepIds = new Set(keep.map((t) => t.id));
   const closedTabs = tabs.filter((t) => !keepIds.has(t.id) && !t.isPinned);

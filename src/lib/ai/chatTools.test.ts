@@ -314,6 +314,17 @@ describe("resolveCloseTarget", () => {
     expect(resolveCloseTarget({ title: 12 }, tabs)).toEqual({ error: "missing-title" });
   });
 
+  it("closes via a truncated site-suffix title but still skips pinned", () => {
+    const suffixed = [
+      makeTab({ id: 30, title: "Inbox - Mail", domain: "mail.google.com" }),
+      makeTab({ id: 31, title: "Inbox - Mail", domain: "mail.google.com" }),
+      makeTab({ id: 32, title: "Pinned - Mail", domain: "mail.google.com", isPinned: true }),
+    ];
+    const r = resolveCloseTarget({ title: "Inbox" }, suffixed);
+    expect("tabs" in r && r.tabs.map((t) => t.id)).toEqual([30, 31]);
+    expect("tabs" in r && r.skippedPinned).toBe(0);
+  });
+
   it("rejects raw-string arguments (unparseable calls never pass)", () => {
     expect(resolveCloseTarget('{"title":"Inbox"}', tabs)).toEqual({
       error: "missing-title",
@@ -501,6 +512,48 @@ describe("resolveTabTarget (non-destructive ops)", () => {
     expect(resolveTabTarget({}, tabs)).toEqual({ error: "missing-title" });
     expect(resolveTabTarget({ title: "Mystery" }, tabs)).toEqual({ error: "no-match" });
   });
+
+  it("matches a truncated site-suffix title (e.g. '… - YouTube') via an unambiguous prefix", () => {
+    const ytTabs = [
+      makeTab({
+        id: 10,
+        title: "World's Most Beautiful 4K Video - YouTube",
+        domain: "youtube.com",
+      }),
+      makeTab({ id: 11, title: "Pinned - YouTube", domain: "youtube.com", isPinned: true }),
+    ];
+    expect(resolveTabTarget({ title: "World's Most Beautiful 4K Video" }, ytTabs)).toEqual({
+      tabs: [ytTabs[0]],
+      skippedPinned: 0,
+    });
+    expect(resolveTabTarget({ title: "Pinned" }, ytTabs)).toEqual({
+      tabs: [ytTabs[1]],
+      skippedPinned: 0,
+    });
+  });
+
+  it("still batches duplicate tabs under a suffix match", () => {
+    const dup = [
+      makeTab({ id: 12, title: "Live - YouTube", domain: "youtube.com" }),
+      makeTab({ id: 13, title: "Live - YouTube", domain: "youtube.com" }),
+    ];
+    expect(resolveTabTarget({ title: "Live" }, dup)).toEqual({ tabs: dup, skippedPinned: 0 });
+  });
+
+  it("resolves a '(domain)' suffix the model echoed from the tab list", () => {
+    expect(resolveTabTarget({ title: "Video (youtube.com)" }, tabs)).toEqual({
+      tabs: [tabs[0]],
+      skippedPinned: 0,
+    });
+  });
+
+  it("refuses when a prefix matches two different tabs", () => {
+    const two = [
+      makeTab({ id: 14, title: "Deep dive part 1", domain: "x.com" }),
+      makeTab({ id: 15, title: "Deep dive part 2", domain: "x.com" }),
+    ];
+    expect(resolveTabTarget({ title: "Deep dive" }, two)).toEqual({ error: "no-match" });
+  });
 });
 
 describe("MUTE_TAB_TOOL / UNMUTE_TAB_TOOL", () => {
@@ -540,6 +593,21 @@ describe("CLOSE_OTHERS_TOOL / resolveCloseOthersTarget", () => {
       error: "no-match",
     });
     expect(resolveCloseOthersTarget({}, tabs)).toEqual({ error: "missing-title" });
+  });
+
+  it("keeps a keeper matched via a truncated site-suffix title", () => {
+    const suffixed = [
+      makeTab({ id: 1, title: "Inbox - Mail", domain: "mail.google.com" }),
+      makeTab({ id: 2, title: "Video - YouTube", domain: "youtube.com" }),
+      makeTab({ id: 3, title: "News", domain: "news.ycombinator.com" }),
+    ];
+    const r = resolveCloseOthersTarget({ title: "Inbox" }, suffixed);
+    expect(r).toEqual({
+      closedTabs: [suffixed[1], suffixed[2]],
+      keptTitle: "Inbox - Mail",
+      keptPinned: 0,
+      closedPinned: 0,
+    });
   });
 
   it("renders a human result text with the pinned note", () => {
