@@ -288,6 +288,24 @@ describe("AskAI sidebar", () => {
     expect(screen.queryByRole("menu", { name: "Suggested questions" })).toBeNull();
   });
 
+  it("suggestion menu covers the action tools as well as the analysis questions", () => {
+    renderAskAI();
+    fireEvent.click(screen.getByRole("button", { name: "Ask a suggested question" }));
+    const menu = screen.getByRole("menu", { name: "Suggested questions" });
+    for (const q of [
+      "Mute the tab that's playing audio",
+      "Close every tab except the one I'm using",
+      "Duplicate a tab I mention",
+      "Reopen the last tab I closed",
+      "Copy the links of my open tabs",
+      "Save all my open tabs as a session",
+      "Tell me what's on one of my tabs",
+      "Jump straight to a tab I have open",
+    ]) {
+      expect(within(menu).getByText(q)).toBeInTheDocument();
+    }
+  });
+
   it("? button opens the menu on hover and it closes on outside pointerdown", async () => {
     renderAskAI();
     const suggestBtn = screen.getByRole("button", { name: "Ask a suggested question" });
