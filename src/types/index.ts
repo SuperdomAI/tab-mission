@@ -55,6 +55,10 @@ export interface AppSettings {
   aiEmbedModel: string;
   /** Gates F6/F7 page reading; requests `scripting` + host grants on first enable. */
   aiPageReadingEnabled: boolean;
+  /** Gates the Ask AI `copyTabUrls` tool; requests optional `clipboardWrite`. */
+  aiClipboardEnabled: boolean;
+  /** Gates the Ask AI `reopenClosedTab` tool; requests optional `sessions`. */
+  aiReopenEnabled: boolean;
   /** Per-feature toggles — default ON once the AI Assist master is on. */
   aiDebrief: boolean;
   aiTriage: boolean;
@@ -100,6 +104,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   aiChatModel: DEFAULT_PROFILE.chat,
   aiEmbedModel: DEFAULT_PROFILE.embed,
   aiPageReadingEnabled: false,
+  aiClipboardEnabled: false,
+  aiReopenEnabled: false,
   aiDebrief: true,
   aiTriage: true,
   aiSuggestions: true,

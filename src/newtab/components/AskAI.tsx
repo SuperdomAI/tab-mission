@@ -10,15 +10,23 @@ import {
 } from "../../lib/ollama";
 import {
   CLOSE_TAB_TOOL,
+  CLOSE_OTHERS_TOOL,
+  COPY_TABS_TOOL,
+  DUPLICATE_TAB_TOOL,
   GROUP_TABS_TOOL,
   HIBERNATE_TAB_TOOL,
   JUMP_TAB_TOOL,
+  MUTE_TAB_TOOL,
   OPEN_TAB_TOOL,
   PIN_TAB_TOOL,
   READ_PAGE_TOOL,
+  REOPEN_TAB_TOOL,
   SAVE_SESSION_TOOL,
+  UNMUTE_TAB_TOOL,
   UNPIN_TAB_TOOL,
+  closeOthersResultText,
   closeResultText,
+  copyResultText,
   detectCloseProposals,
   detectHibernateProposals,
   groupResultText,
@@ -26,9 +34,12 @@ import {
   openResultText,
   readPageRefusalText,
   readPageSuccessText,
+  resolveCloseOthersTarget,
   resolveCloseTarget,
+  resolveCopyTitles,
   resolveGroupTarget,
   resolveOpenUrl,
+  resolveTabTarget,
   saveSessionResultText,
   type CloseProposal,
   type CloseTarget,
@@ -37,6 +48,8 @@ import { cleanAssistantText, compactMessages } from "../../lib/ai/chatText";
 import Tooltip from "./Tooltip";
 import { persistSession } from "../hooks/useTabActions";
 import { hasPageReadingPermission } from "../../lib/pageReading";
+import { hasReopenPermission, resolveReopenTarget } from "../../lib/ai/reopen";
+import { hasClipboardPermission, clipboardText } from "../../lib/clipboard";
 import { extractPageText } from "../../lib/pageExtract";
 import type { EnrichedTab } from "../../types/index";
 
@@ -61,6 +74,25 @@ const SUGGESTIONS = [
 
 const MAX_TOOL_TURNS = 2;
 const TAB_LIST_CAP = 40;
+
+/** The full agentic toolset — sent with every request, and the allow-list for tool execution. */
+const TOOL_DEFS = [
+  CLOSE_TAB_TOOL,
+  HIBERNATE_TAB_TOOL,
+  OPEN_TAB_TOOL,
+  JUMP_TAB_TOOL,
+  GROUP_TABS_TOOL,
+  SAVE_SESSION_TOOL,
+  PIN_TAB_TOOL,
+  UNPIN_TAB_TOOL,
+  READ_PAGE_TOOL,
+  MUTE_TAB_TOOL,
+  UNMUTE_TAB_TOOL,
+  CLOSE_OTHERS_TOOL,
+  DUPLICATE_TAB_TOOL,
+  REOPEN_TAB_TOOL,
+  COPY_TABS_TOOL,
+];
 
 /**
  * Ask AI — a right-side chat sidebar (docs-site style) over the open tab
@@ -178,6 +210,11 @@ const system = useCallback(
           "titles. To save all open tabs for later, call saveSession with a short name. To pin or unpin a " +
           "tab, call pinTab or unpinTab with its exact title. When the user asks what's on a page or to " +
           "summarize a specific tab, call readPage with its exact title and answer from the content you receive. " +
+          "When the user wants quiet, call muteTab with the exact title (unmuteTab reverses it). When the user " +
+          "asks to close everything else or declutter, call closeOtherTabs with the exact title of the tab to " +
+          "KEEP — it closes all other non-pinned tabs. To open another copy of a tab, call duplicateTab with its " +
+          "exact title. When the user just closed something and wants it back, call reopenClosedTab (no arguments). " +
+          "To share or copy links, call copyTabUrls with an array of exact titles, or omit titles to copy all. " +
           "Never invent a tab title: only mention or act on tabs that appear in the list below. " +
           "Use the exact title only, without the domain in parentheses. Do not announce the call or show the " +
           "tool name in your reply. After the tool runs you will receive its result and should reply with one " +
@@ -253,34 +290,14 @@ const system = useCallback(
         await streamChat({
           messages: [system(useTabStore.getState().tabs), ...conv],
           model: settings.aiChatModel,
-          tools: [
-            CLOSE_TAB_TOOL,
-            HIBERNATE_TAB_TOOL,
-            OPEN_TAB_TOOL,
-            JUMP_TAB_TOOL,
-            GROUP_TABS_TOOL,
-            SAVE_SESSION_TOOL,
-            PIN_TAB_TOOL,
-            UNPIN_TAB_TOOL,
-            READ_PAGE_TOOL,
-          ],
+          tools: TOOL_DEFS,
           signal: ctrl.signal,
           onDelta: (d) => {
             acc += d;
             setPendingText(cleanAssistantText(acc));
           },
           onToolCall: (name, args) => {
-            const known = [
-              CLOSE_TAB_TOOL,
-              HIBERNATE_TAB_TOOL,
-              OPEN_TAB_TOOL,
-              JUMP_TAB_TOOL,
-              GROUP_TABS_TOOL,
-              SAVE_SESSION_TOOL,
-              PIN_TAB_TOOL,
-              UNPIN_TAB_TOOL,
-              READ_PAGE_TOOL,
-            ].some((t) => t.function.name === name);
+            const known = TOOL_DEFS.some((t) => t.function.name === name);
             if (known) toolCalls.push({ name, arguments: JSON.stringify(args) });
           },
           onRetry: () => setToolsOff(true),
@@ -358,6 +375,38 @@ const system = useCallback(
           void jumpTo(target.tabs[0]); // activates + focuses the window
         }
         results.push(jumpResultText(target));
+      } else if (
+        call.name === MUTE_TAB_TOOL.function.name ||
+        call.name === UNMUTE_TAB_TOOL.function.name
+      ) {
+        // Reversible audio control — pinned tabs may be muted.
+        const muted = call.name === MUTE_TAB_TOOL.function.name;
+        const muteTarget = resolveTabTarget(args, live);
+        if ("tabs" in muteTarget) {
+          for (const t of muteTarget.tabs) {
+            void chrome.tabs.update(t.id, { muted });
+          }
+        }
+        results.push(closeResultText(muteTarget, call.name, muted ? "muted" : "unmuted"));
+      } else if (call.name === CLOSE_OTHERS_TOOL.function.name) {
+        const others = resolveCloseOthersTarget(args, live);
+        if ("closedTabs" in others && others.closedTabs.length > 0) {
+          void closeMany(others.closedTabs.map((t) => t.id)); // one batched remove
+          for (const tab of others.closedTabs) {
+            onClosed({ title: tab.title, url: tab.url });
+          }
+        }
+        results.push(closeOthersResultText(others));
+      } else if (call.name === DUPLICATE_TAB_TOOL.function.name) {
+        const dupTarget = resolveTabTarget(args, live);
+        if ("tabs" in dupTarget && dupTarget.tabs.length > 0) {
+          void chrome.tabs.duplicate(dupTarget.tabs[0].id);
+        }
+        results.push(closeResultText(dupTarget, call.name, "duplicated"));
+      } else if (call.name === REOPEN_TAB_TOOL.function.name) {
+        results.push(await executeReopen());
+      } else if (call.name === COPY_TABS_TOOL.function.name) {
+        results.push(await executeCopyTabs(args, live));
       } else if (call.name === GROUP_TABS_TOOL.function.name) {
         const group = resolveGroupTarget(args, live);
         if ("tabIds" in group && group.tabIds.length > 0) {
@@ -425,6 +474,48 @@ const system = useCallback(
     } catch {
       return readPageRefusalText("unreadable");
     }
+  }
+
+  /**
+   * reopenClosedTab execution — gates on the optional `sessions` grant
+   * (Settings opt-in), reopens the most recent TAB-level close (window
+   * closes are skipped — auto-restoring a whole window would surprise).
+   */
+  async function executeReopen(): Promise<string> {
+    if (!(await hasReopenPermission())) {
+      return 'reopenClosedTab: reopening closed tabs is off — enable "Reopen Closed Tabs" in Settings';
+    }
+    try {
+      const entries = await chrome.sessions.getRecentlyClosed();
+      const target = resolveReopenTarget(entries);
+      if ("error" in target) {
+        return "reopenClosedTab: nothing recently closed to reopen";
+      }
+      const { sessionId, title } = target.entry;
+      if (!sessionId) return "reopenClosedTab: nothing recently closed to reopen";
+      await chrome.sessions.restore(sessionId);
+      return `reopenClosedTab: reopened — ${title ?? "recently closed tab"}`;
+    } catch {
+      return "reopenClosedTab: couldn't reopen — nothing happened";
+    }
+  }
+
+  /**
+   * copyTabUrls execution — gates on the optional `clipboardWrite` grant
+   * (Settings opt-in), writes "Title — URL" lines for the resolved tabs.
+   */
+  async function executeCopyTabs(args: unknown, live: EnrichedTab[]): Promise<string> {
+    if (!(await hasClipboardPermission())) {
+      return 'copyTabUrls: clipboard access is off — enable "Copy Tab Links" in Settings';
+    }
+    const target = resolveCopyTitles(args, live);
+    if ("error" in target) return copyResultText(target);
+    try {
+      await navigator.clipboard.writeText(clipboardText(target.tabs));
+    } catch {
+      return "copyTabUrls: clipboard write failed — nothing copied";
+    }
+    return copyResultText(target);
   }
 
   /** User clicked a text-claim chip — validate once more, then execute. */

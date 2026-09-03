@@ -200,6 +200,127 @@ export const READ_PAGE_TOOL = {
   },
 } as const;
 
+export const MUTE_TAB_TOOL = {
+  type: "function",
+  function: {
+    name: "muteTab",
+    description:
+      "Mute (silence) one or more open browser tabs by their exact title. " +
+      "Use this when the user wants quiet — e.g. a video or music tab playing audio. " +
+      "Muting is reversible and never closes or unloads anything; pinned tabs may be muted.",
+    parameters: {
+      type: "object",
+      properties: {
+        title: {
+          type: "string",
+          description: "The exact title of the tab(s) to mute.",
+        },
+      },
+      required: ["title"],
+    },
+  },
+} as const;
+
+export const UNMUTE_TAB_TOOL = {
+  type: "function",
+  function: {
+    name: "unmuteTab",
+    description:
+      "Unmute one or more muted open browser tabs by their exact title. Reverses muteTab.",
+    parameters: {
+      type: "object",
+      properties: {
+        title: {
+          type: "string",
+          description: "The exact title of the tab(s) to unmute.",
+        },
+      },
+      required: ["title"],
+    },
+  },
+} as const;
+
+export const CLOSE_OTHERS_TOOL = {
+  type: "function",
+  function: {
+    name: "closeOtherTabs",
+    description:
+      "Close every open tab EXCEPT the one with the given exact title (the tab to keep). " +
+      "Use when the user asks to close everything else, declutter, or close all but one. " +
+      "Pinned tabs are never closed. Nothing closes unless the tab to keep actually exists.",
+    parameters: {
+      type: "object",
+      properties: {
+        title: {
+          type: "string",
+          description: "The exact title of the tab to KEEP open.",
+        },
+      },
+      required: ["title"],
+    },
+  },
+} as const;
+
+export const DUPLICATE_TAB_TOOL = {
+  type: "function",
+  function: {
+    name: "duplicateTab",
+    description:
+      "Duplicate (open a copy of) an open browser tab by its exact title, " +
+      "e.g. when the user wants another instance of the same page. " +
+      "Duplicates the first matching tab. Never closes or unloads anything.",
+    parameters: {
+      type: "object",
+      properties: {
+        title: {
+          type: "string",
+          description: "The exact title of the tab to duplicate.",
+        },
+      },
+      required: ["title"],
+    },
+  },
+} as const;
+
+export const REOPEN_TAB_TOOL = {
+  type: "function",
+  function: {
+    name: "reopenClosedTab",
+    description:
+      "Reopen the most recently closed browser tab. Use when the user asks to undo a close, " +
+      "reopen what they just closed, or restore a tab they lost. Takes no arguments. " +
+      "This never affects currently open tabs.",
+    parameters: {
+      type: "object",
+      properties: {},
+      required: [],
+    },
+  },
+} as const;
+
+export const COPY_TABS_TOOL = {
+  type: "function",
+  function: {
+    name: "copyTabUrls",
+    description:
+      "Copy the titles and URLs of open browser tabs to the clipboard as a text list. " +
+      "Pass an array of exact titles to copy only those tabs, or omit titles to copy ALL open tabs. " +
+      "Use when the user wants to share links, save them to notes, or paste their tabs elsewhere. " +
+      "Read-only — nothing is closed or modified.",
+    parameters: {
+      type: "object",
+      properties: {
+        titles: {
+          type: "array",
+          items: { type: "string" },
+          description: "Exact titles of the tabs to copy (optional — default: all open tabs).",
+        },
+      },
+      required: [],
+    },
+  },
+} as const;
+
 export type CloseTarget =
   | { tabs: EnrichedTab[]; skippedPinned: number }
   | { error: "missing-title" | "no-match" };
@@ -215,16 +336,27 @@ function normalize(title: string): string {
  * on pinned tabs are reported (skippedPinned) but never closed.
  */
 export function resolveCloseTarget(args: unknown, tabs: EnrichedTab[]): CloseTarget {
+  const target = resolveTabTarget(args, tabs);
+  if ("error" in target) return target;
+  return {
+    tabs: target.tabs.filter((t) => !t.isPinned),
+    skippedPinned: target.tabs.filter((t) => t.isPinned).length,
+  };
+}
+
+/**
+ * Same exact-title resolution as `resolveCloseTarget`, but includes pinned
+ * tabs in the result — for non-destructive tools (mute, duplicate) where a
+ * pinned tab may be acted on.
+ */
+export function resolveTabTarget(args: unknown, tabs: EnrichedTab[]): CloseTarget {
   const obj = typeof args === "object" && args !== null ? (args as Record<string, unknown>) : null;
   const title = obj?.title;
   if (typeof title !== "string" || title.trim() === "") return { error: "missing-title" };
   const wanted = normalize(title);
   const matches = tabs.filter((t) => normalize(t.title) === wanted);
   if (matches.length === 0) return { error: "no-match" };
-  return {
-    tabs: matches.filter((t) => !t.isPinned),
-    skippedPinned: matches.filter((t) => t.isPinned).length,
-  };
+  return { tabs: matches, skippedPinned: 0 };
 }
 
 /** Human summary of a close-tab result, for the tool card in the thread. */
@@ -479,4 +611,93 @@ export function detectHibernateProposals(text: string, tabs: EnrichedTab[]): Clo
     }
   }
   return out;
+}
+
+// ─── closeOtherTabs — keep one title, close everything else ──────────────────
+
+export type CloseOthersTarget =
+  | { closedTabs: EnrichedTab[]; keptTitle: string; keptPinned: number; closedPinned: number }
+  | { error: "missing-title" | "no-match" };
+
+/**
+ * Validate a model-produced `closeOtherTabs` call. The given title is the
+ * tab to KEEP — nothing closes unless it resolves (a typo must never wipe
+ * the session). Pinned tabs are never closed (kept, and reported).
+ */
+export function resolveCloseOthersTarget(args: unknown, tabs: EnrichedTab[]): CloseOthersTarget {
+  const obj = typeof args === "object" && args !== null ? (args as Record<string, unknown>) : null;
+  const title = obj?.title;
+  if (typeof title !== "string" || title.trim() === "") return { error: "missing-title" };
+  const keep = tabs.filter((t) => normalize(t.title) === normalize(title));
+  if (keep.length === 0) return { error: "no-match" };
+  const keepIds = new Set(keep.map((t) => t.id));
+  const closedTabs = tabs.filter((t) => !keepIds.has(t.id) && !t.isPinned);
+  const closedPinned = tabs.filter((t) => !keepIds.has(t.id) && t.isPinned).length;
+  return {
+    closedTabs,
+    keptTitle: keep[0].title,
+    keptPinned: keep.filter((t) => t.isPinned).length,
+    closedPinned,
+  };
+}
+
+/** Human summary of a close-others result. */
+export function closeOthersResultText(result: CloseOthersTarget, name = "closeOtherTabs"): string {
+  if ("error" in result) {
+    return result.error === "missing-title"
+      ? `${name}: no title given — nothing closed`
+      : `${name}: no open tab with that title to keep — nothing closed`;
+  }
+  const closed = result.closedTabs.map((t) => `closed — ${t.title}`).join(" · ");
+  const pinnedNote =
+    result.closedPinned > 0 ? ` · ${result.closedPinned} pinned tab(s) kept` : "";
+  return `${name}: kept "${result.keptTitle}" — ${closed || "nothing else open"}${pinnedNote}`;
+}
+
+// ─── copyTabUrls — share links to the clipboard ──────────────────────────────
+
+export type CopyTarget =
+  | { tabs: EnrichedTab[]; skipped: number }
+  | { error: "no-match" };
+
+/**
+ * Validate a model-produced `copyTabUrls` call. Omitted `titles` copies ALL
+ * open tabs; a `titles` array copies the resolved matches (unresolvable
+ * titles are skipped and reported). Nothing to copy → error.
+ */
+export function resolveCopyTitles(args: unknown, tabs: EnrichedTab[]): CopyTarget {
+  const obj = typeof args === "object" && args !== null ? (args as Record<string, unknown>) : null;
+  const titles = obj?.titles;
+  if (!Array.isArray(titles) || titles.length === 0) {
+    return { tabs, skipped: 0 };
+  }
+  const out: EnrichedTab[] = [];
+  const seen = new Set<number>();
+  let skipped = 0;
+  for (const raw of titles) {
+    if (typeof raw !== "string") {
+      skipped++;
+      continue;
+    }
+    const target = resolveTabTarget({ title: raw }, tabs);
+    if ("tabs" in target) {
+      for (const t of target.tabs) {
+        if (!seen.has(t.id)) {
+          seen.add(t.id);
+          out.push(t);
+        }
+      }
+    } else {
+      skipped++;
+    }
+  }
+  if (out.length === 0) return { error: "no-match" };
+  return { tabs: out, skipped };
+}
+
+/** Human summary of a copy result. */
+export function copyResultText(result: CopyTarget, name = "copyTabUrls"): string {
+  if ("error" in result) return `${name}: no open tab matched any title — nothing copied`;
+  const skippedNote = result.skipped > 0 ? ` (${result.skipped} unmatched skipped)` : "";
+  return `${name}: copied ${result.tabs.length} link(s) to the clipboard${skippedNote}`;
 }

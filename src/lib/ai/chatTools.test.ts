@@ -1,15 +1,23 @@
 import { describe, it, expect } from "vitest";
 import {
   CLOSE_TAB_TOOL,
+  CLOSE_OTHERS_TOOL,
+  COPY_TABS_TOOL,
+  DUPLICATE_TAB_TOOL,
   GROUP_TABS_TOOL,
   HIBERNATE_TAB_TOOL,
   JUMP_TAB_TOOL,
+  MUTE_TAB_TOOL,
   OPEN_TAB_TOOL,
   PIN_TAB_TOOL,
   READ_PAGE_TOOL,
+  REOPEN_TAB_TOOL,
   SAVE_SESSION_TOOL,
+  UNMUTE_TAB_TOOL,
   UNPIN_TAB_TOOL,
+  closeOthersResultText,
   closeResultText,
+  copyResultText,
   detectCloseProposals,
   detectHibernateProposals,
   extractCloseTitles,
@@ -19,9 +27,12 @@ import {
   openResultText,
   readPageRefusalText,
   readPageSuccessText,
+  resolveCloseOthersTarget,
   resolveCloseTarget,
+  resolveCopyTitles,
   resolveGroupTarget,
   resolveOpenUrl,
+  resolveTabTarget,
   saveSessionResultText,
 } from "./chatTools";
 import { makeTab } from "../../test/factory";
@@ -470,5 +481,125 @@ describe("detectHibernateProposals", () => {
         tabs,
       ),
     ).toEqual([{ title: "Inbox", tabIds: [2, 3] }]);
+  });
+});
+describe("resolveTabTarget (non-destructive ops)", () => {
+  const tabs = [
+    makeTab({ id: 1, title: "Video", domain: "youtube.com" }),
+    makeTab({ id: 2, title: "Inbox", domain: "mail.google.com" }),
+    makeTab({ id: 3, title: "Pinned", domain: "x.com", isPinned: true }),
+  ];
+
+  it("matches by exact title including pinned tabs", () => {
+    expect(resolveTabTarget({ title: "Pinned" }, tabs)).toEqual({
+      tabs: [tabs[2]],
+      skippedPinned: 0,
+    });
+  });
+
+  it("rejects missing and unmatched titles like closeTab", () => {
+    expect(resolveTabTarget({}, tabs)).toEqual({ error: "missing-title" });
+    expect(resolveTabTarget({ title: "Mystery" }, tabs)).toEqual({ error: "no-match" });
+  });
+});
+
+describe("MUTE_TAB_TOOL / UNMUTE_TAB_TOOL", () => {
+  it("are Ollama-style function tools requiring a title", () => {
+    expect(MUTE_TAB_TOOL.function.name).toBe("muteTab");
+    expect(MUTE_TAB_TOOL.function.parameters.required).toEqual(["title"]);
+    expect(UNMUTE_TAB_TOOL.function.name).toBe("unmuteTab");
+    expect(UNMUTE_TAB_TOOL.function.parameters.required).toEqual(["title"]);
+  });
+});
+
+describe("CLOSE_OTHERS_TOOL / resolveCloseOthersTarget", () => {
+  const tabs = [
+    makeTab({ id: 1, title: "Inbox", domain: "mail.google.com" }),
+    makeTab({ id: 2, title: "Video", domain: "youtube.com" }),
+    makeTab({ id: 3, title: "News", domain: "news.ycombinator.com" }),
+    makeTab({ id: 4, title: "Pinned", domain: "x.com", isPinned: true }),
+  ];
+
+  it("is an Ollama-style function tool requiring a title", () => {
+    expect(CLOSE_OTHERS_TOOL.function.name).toBe("closeOtherTabs");
+    expect(CLOSE_OTHERS_TOOL.function.parameters.required).toEqual(["title"]);
+  });
+
+  it("closes every non-pinned tab except the keeper", () => {
+    const r = resolveCloseOthersTarget({ title: "Inbox" }, tabs);
+    expect(r).toEqual({
+      closedTabs: [tabs[1], tabs[2]],
+      keptTitle: "Inbox",
+      keptPinned: 0,
+      closedPinned: 1,
+    });
+  });
+
+  it("refuses when the keeper does not exist — nothing may close", () => {
+    expect(resolveCloseOthersTarget({ title: "Mystery" }, tabs)).toEqual({
+      error: "no-match",
+    });
+    expect(resolveCloseOthersTarget({}, tabs)).toEqual({ error: "missing-title" });
+  });
+
+  it("renders a human result text with the pinned note", () => {
+    const r = resolveCloseOthersTarget({ title: "Inbox" }, tabs);
+    expect(closeOthersResultText(r)).toBe(
+      'closeOtherTabs: kept "Inbox" — closed — Video · closed — News · 1 pinned tab(s) kept',
+    );
+    expect(closeOthersResultText({ error: "no-match" })).toContain("nothing closed");
+  });
+});
+
+describe("DUPLICATE_TAB_TOOL", () => {
+  it("is an Ollama-style function tool requiring a title", () => {
+    expect(DUPLICATE_TAB_TOOL.function.name).toBe("duplicateTab");
+    expect(DUPLICATE_TAB_TOOL.function.parameters.required).toEqual(["title"]);
+  });
+});
+
+describe("REOPEN_TAB_TOOL", () => {
+  it("is an Ollama-style function tool with no arguments", () => {
+    expect(REOPEN_TAB_TOOL.function.name).toBe("reopenClosedTab");
+    expect(REOPEN_TAB_TOOL.function.parameters.required).toEqual([]);
+  });
+});
+
+describe("COPY_TABS_TOOL / resolveCopyTitles", () => {
+  const tabs = [
+    makeTab({ id: 1, title: "Inbox", domain: "mail.google.com" }),
+    makeTab({ id: 2, title: "Inbox", domain: "mail.google.com" }),
+    makeTab({ id: 3, title: "Video", domain: "youtube.com" }),
+    makeTab({ id: 4, title: "Pinned", domain: "x.com", isPinned: true }),
+  ];
+
+  it("is an Ollama-style function tool with an optional titles array", () => {
+    expect(COPY_TABS_TOOL.function.name).toBe("copyTabUrls");
+    expect(COPY_TABS_TOOL.function.parameters.required).toEqual([]);
+  });
+
+  it("copies ALL open tabs when titles are omitted", () => {
+    expect(resolveCopyTitles({}, tabs)).toEqual({ tabs, skipped: 0 });
+    expect(resolveCopyTitles({ titles: [] }, tabs)).toEqual({ tabs, skipped: 0 });
+  });
+
+  it("copies only the resolved titles, skipping unmatched ones", () => {
+    expect(resolveCopyTitles({ titles: ["Inbox", "Mystery"] }, tabs)).toEqual({
+      tabs: [tabs[0], tabs[1]],
+      skipped: 1,
+    });
+  });
+
+  it("errors when nothing resolves", () => {
+    expect(resolveCopyTitles({ titles: ["Mystery"] }, tabs)).toEqual({
+      error: "no-match",
+    });
+  });
+
+  it("renders a human result text", () => {
+    expect(copyResultText({ tabs: tabs.slice(0, 2), skipped: 1 })).toBe(
+      "copyTabUrls: copied 2 link(s) to the clipboard (1 unmatched skipped)",
+    );
+    expect(copyResultText({ error: "no-match" })).toContain("nothing copied");
   });
 });
