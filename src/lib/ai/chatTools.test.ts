@@ -1,16 +1,25 @@
 import { describe, it, expect } from "vitest";
 import {
   CLOSE_TAB_TOOL,
+  GROUP_TABS_TOOL,
   HIBERNATE_TAB_TOOL,
+  JUMP_TAB_TOOL,
   OPEN_TAB_TOOL,
+  PIN_TAB_TOOL,
+  SAVE_SESSION_TOOL,
+  UNPIN_TAB_TOOL,
   closeResultText,
   detectCloseProposals,
   detectHibernateProposals,
   extractCloseTitles,
   extractHibernateTitles,
+  groupResultText,
+  jumpResultText,
   openResultText,
   resolveCloseTarget,
+  resolveGroupTarget,
   resolveOpenUrl,
+  saveSessionResultText,
 } from "./chatTools";
 import { makeTab } from "../../test/factory";
 
@@ -36,6 +45,131 @@ describe("OPEN_TAB_TOOL", () => {
     expect(OPEN_TAB_TOOL.type).toBe("function");
     expect(OPEN_TAB_TOOL.function.name).toBe("openTab");
     expect(OPEN_TAB_TOOL.function.parameters.required).toEqual(["url"]);
+  });
+});
+
+describe("tab-control tools", () => {
+  it("jump/group/save/pin/unpin are Ollama-style function tools", () => {
+    expect(JUMP_TAB_TOOL.function.parameters.required).toEqual(["title"]);
+    expect(GROUP_TABS_TOOL.function.parameters.required).toEqual(["titles"]);
+    expect(SAVE_SESSION_TOOL.function.parameters.required).toEqual(["name"]);
+    expect(PIN_TAB_TOOL.function.parameters.required).toEqual(["title"]);
+    expect(UNPIN_TAB_TOOL.function.parameters.required).toEqual(["title"]);
+    const names = [
+      JUMP_TAB_TOOL,
+      GROUP_TABS_TOOL,
+      SAVE_SESSION_TOOL,
+      PIN_TAB_TOOL,
+      UNPIN_TAB_TOOL,
+    ].map((t) => t.function.name);
+    expect(new Set(names).size).toBe(5);
+  });
+});
+
+describe("jumpResultText", () => {
+  const tabs = [
+    makeTab({ id: 1, title: "Inbox", domain: "mail.google.com" }),
+    makeTab({ id: 2, title: "Inbox", domain: "mail.google.com" }),
+    makeTab({ id: 3, title: "Pinned", domain: "x.com", isPinned: true }),
+  ];
+
+  it("names the activated tab and mentions skipped duplicates", () => {
+    expect(jumpResultText({ tabs: [tabs[0]], skippedPinned: 0 })).toBe(
+      "jumpTab: activated — Inbox",
+    );
+    expect(jumpResultText({ tabs: [tabs[0], tabs[1]], skippedPinned: 0 })).toBe(
+      "jumpTab: activated — Inbox (1 duplicate(s) not activated)",
+    );
+  });
+
+  it("mentions pinned matches when nothing else matched", () => {
+    expect(jumpResultText({ tabs: [], skippedPinned: 1 })).toBe(
+      "jumpTab: nothing activated · 1 pinned tab(s) not activated",
+    );
+  });
+
+  it("explains each refusal", () => {
+    expect(jumpResultText({ error: "no-match" })).toBe(
+      "jumpTab: no open tab with that title — nothing activated",
+    );
+    expect(jumpResultText({ error: "missing-title" })).toBe(
+      "jumpTab: no title given — nothing activated",
+    );
+  });
+});
+
+describe("resolveGroupTarget", () => {
+  const tabs = [
+    makeTab({ id: 1, title: "Inbox", domain: "mail.google.com" }),
+    makeTab({ id: 2, title: "Inbox", domain: "mail.google.com" }),
+    makeTab({ id: 3, title: "Pinned", domain: "x.com", isPinned: true }),
+    makeTab({ id: 4, title: "Docs", domain: "docs.google.com" }),
+  ];
+
+  it("groups matched titles, dedupes, and skips pinned", () => {
+    const r = resolveGroupTarget({ titles: ["Inbox", "Inbox", "Docs", "Pinned"] }, tabs);
+    expect(r).toEqual({
+      tabIds: [1, 2, 4],
+      groupedTitles: ["Inbox", "Inbox", "Docs"],
+      skippedPinned: 1,
+    });
+  });
+
+  it("ignores non-string entries and unresolvable titles", () => {
+    const r = resolveGroupTarget({ titles: ["Docs", "Mystery", 12] }, tabs);
+    expect(r).toEqual({
+      tabIds: [4],
+      groupedTitles: ["Docs"],
+      skippedPinned: 0,
+    });
+  });
+
+  it("rejects when nothing matches", () => {
+    expect(resolveGroupTarget({ titles: ["Mystery"] }, tabs)).toEqual({
+      error: "no-match",
+    });
+    expect(resolveGroupTarget({ titles: ["Pinned"] }, tabs)).toEqual({
+      error: "no-match",
+    });
+  });
+
+  it("rejects a missing or non-array titles", () => {
+    expect(resolveGroupTarget({}, tabs)).toEqual({ error: "missing-titles" });
+    expect(resolveGroupTarget({ titles: [] }, tabs)).toEqual({
+      error: "missing-titles",
+    });
+    expect(resolveGroupTarget({ titles: "Inbox" }, tabs)).toEqual({
+      error: "missing-titles",
+    });
+  });
+});
+
+describe("groupResultText", () => {
+  it("reports the grouped count and titles", () => {
+    expect(
+      groupResultText({
+        tabIds: [1, 2],
+        groupedTitles: ["Inbox", "Inbox"],
+        skippedPinned: 1,
+      }),
+    ).toBe("groupTabs: grouped 2 tab(s) — Inbox · Inbox · 1 pinned tab(s) not grouped");
+  });
+
+  it("explains each refusal", () => {
+    expect(groupResultText({ error: "missing-titles" })).toBe(
+      "groupTabs: no titles given — nothing grouped",
+    );
+    expect(groupResultText({ error: "no-match" })).toBe(
+      "groupTabs: no open tab matched any title — nothing grouped",
+    );
+  });
+});
+
+describe("saveSessionResultText", () => {
+  it("reports the count and session name", () => {
+    expect(saveSessionResultText(7, "Deep work")).toBe(
+      'saveSession: saved 7 tab(s) as "Deep work"',
+    );
   });
 });
 
