@@ -260,8 +260,10 @@ Store updates that flow from `chrome.storage.onChanged` are wrapped in `startTra
 | `BulkActions`        | —                  | `tabs, settings`            | `tabs.remove`, `tabs.discard`                                  |
 | `SessionManager`     | `open, onClose`    | `sessions` (useSession)     | `windows.create`, `storage.local.set/get`                     |
 | `AnalyticsDashboard` | `open, onClose`    | `analytics, tabs`           | —                                                              |
-| `WeeklyReport`       | `open, onClose`    | `analytics`                 | —                                                              |
-| `Settings`           | `open, onClose`    | `settings`                  | `storage.sync.set`                                             |
+| `DebriefCard`       | `open`             | `analytics, settings` + `useAIReports` | `storage.local` write (`aiReports`), Ollama via `bgFetch` |
+| `WeeklyReport`      | `open, onClose`    | `analytics`                 | —                                                              |
+| `CoachCard`         | `open`             | `analytics, settings` + `useAIReports` | `storage.local` write (`aiReports`), Ollama via `bgFetch` |
+| `Settings`          | `open, onClose`    | `settings`                  | `storage.sync.set`                                             |
 | `Tooltip`            | `text, position?, align?` | —                    | —                                                              |
 
 ---
@@ -274,14 +276,23 @@ Store updates that flow from `chrome.storage.onChanged` are wrapped in `startTra
 | `analytics` | `local` | `DailyAnalytics[]` | Last 30 days     |
 | `sessions`  | `local` | `SavedSession[]`   | Last 50 sessions |
 | `settings`  | `sync`  | `AppSettings`      | Single object    |
+| `aiReports` | `local` | `AIReportsMap` (see below) | Entries pruned after 30 days |
 
-### AI cache keys (planned — stages B–F of `docs/AI-FEATURES-PLAN.md`)
+### `aiReports` (UI-owned, landed in PR B)
 
-All AI artifacts are **derived, regenerable caches** under `chrome.storage.local` (same precedent as `workspaces`, which is deliberately UI-owned). None landed yet; the shared primitives that will back them (`src/lib/ai/`) are in place:
+Daily debrief (F1) + weekly coach (F11) reports. Keyed by human-readable report id so the storage stays debuggable; values are `CacheEntry` (`{ result, generatedAt, model }`) with the same freshness contract as `AiCache` — a report is rejected (and regenerated) when its task TTL (6 h for both `debrief` and `coach`) expires or the model changed. Written by the React layer only (`useAIReports` → `AIReportCache` in `src/lib/ai/reports.ts`); the service worker never touches it — derived, regenerable cache (same precedent as `workspaces`).
+
+```
+aiReports: {
+  "debrief:2026-09-03": { result: { summary, sections: [{ heading, text }] }, generatedAt, model },
+  "coach:2026-W36":     { result: { insights: [{ text, severity }] },        generatedAt, model }
+}
+```
+
+### AI cache keys (planned — stages C–F of `docs/AI-FEATURES-PLAN.md`)
 
 | Key | Contents |
 | --- | --- |
-| `aiReports` | `{ [date]: { summary, sections, generatedAt, model } }` — daily debrief + weekly coach |
 | `aiTriagePlan` | `{ signature, items, generatedAt, source: "on-demand" \| "idle" }` |
 | `aiSessionSummaries` | `{ [sessionId]: { summary, generatedAt, model } }` |
 | `aiSuggestions` | `{ signature, items, dismissed }` |

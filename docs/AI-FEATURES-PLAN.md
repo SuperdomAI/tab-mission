@@ -1,6 +1,6 @@
 # AI Features Implementation Plan (v1.3.0 — "Tab Mission Intelligence")
 
-Scope: features 1, 2, 3, 4, 6, 7, 11, 12 from the AI brainstorm. All run on a **local Ollama** instance; nothing leaves the machine. Status: **planning** (no code landed yet).
+Scope: features 1, 2, 3, 4, 6, 7, 11, 12 from the AI brainstorm. All run on a **local Ollama** instance; nothing leaves the machine. Status: **stages A–B landed** (PR A: shared infra + settings fields; PR B: F1 daily debrief + F11 habits coach + settings model tiers). Remaining: F2/F12 (PR C), F3/F4 (PR D), F7 (PR E), F6 (PR F).
 
 ---
 
