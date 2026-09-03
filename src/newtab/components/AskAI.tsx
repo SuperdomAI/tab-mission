@@ -15,6 +15,7 @@ import {
   JUMP_TAB_TOOL,
   OPEN_TAB_TOOL,
   PIN_TAB_TOOL,
+  READ_PAGE_TOOL,
   SAVE_SESSION_TOOL,
   UNPIN_TAB_TOOL,
   closeResultText,
@@ -23,15 +24,20 @@ import {
   groupResultText,
   jumpResultText,
   openResultText,
+  readPageRefusalText,
+  readPageSuccessText,
   resolveCloseTarget,
   resolveGroupTarget,
   resolveOpenUrl,
   saveSessionResultText,
   type CloseProposal,
+  type CloseTarget,
 } from "../../lib/ai/chatTools";
 import { cleanAssistantText } from "../../lib/ai/chatText";
 import Tooltip from "./Tooltip";
 import { persistSession } from "../hooks/useTabActions";
+import { hasPageReadingPermission } from "../../lib/pageReading";
+import { extractPageText } from "../../lib/pageExtract";
 import type { EnrichedTab } from "../../types/index";
 
 interface AskAIProps {
@@ -170,7 +176,8 @@ const system = useCallback(
           "When the user asks to open or focus a tab that is ALREADY open, call jumpTab with its exact title " +
           "(never openTab — that would duplicate it). To group tabs, call groupTabs with an array of exact " +
           "titles. To save all open tabs for later, call saveSession with a short name. To pin or unpin a " +
-          "tab, call pinTab or unpinTab with its exact title. " +
+          "tab, call pinTab or unpinTab with its exact title. When the user asks what's on a page or to " +
+          "summarize a specific tab, call readPage with its exact title and answer from the content you receive. " +
           "Never invent a tab title: only mention or act on tabs that appear in the list below. " +
           "Use the exact title only, without the domain in parentheses. Do not announce the call or show the " +
           "tool name in your reply. After the tool runs you will receive its result and should reply with one " +
@@ -244,6 +251,7 @@ const system = useCallback(
             SAVE_SESSION_TOOL,
             PIN_TAB_TOOL,
             UNPIN_TAB_TOOL,
+            READ_PAGE_TOOL,
           ],
           signal: ctrl.signal,
           onDelta: (d) => {
@@ -260,6 +268,7 @@ const system = useCallback(
               SAVE_SESSION_TOOL,
               PIN_TAB_TOOL,
               UNPIN_TAB_TOOL,
+              READ_PAGE_TOOL,
             ].some((t) => t.function.name === name);
             if (known) toolCalls.push({ name, arguments: JSON.stringify(args) });
           },
@@ -282,7 +291,7 @@ const system = useCallback(
           content: cleanAssistantText(acc),
           tool_calls: toolCalls,
         };
-        const results = executeToolCalls(toolCalls);
+        const results = await executeToolCalls(toolCalls);
         const resultMsg: ChatMessageFull = { role: "tool", content: results.join("\n") };
         append(toolMsg);
         append(resultMsg);
@@ -308,7 +317,7 @@ const system = useCallback(
     }
   }
 
-  function executeToolCalls(calls: ToolCall[]): string[] {
+  async function executeToolCalls(calls: ToolCall[]): Promise<string[]> {
     const live = useTabStore.getState().tabs;
     const results: string[] = [];
     for (const call of calls) {
@@ -319,7 +328,9 @@ const system = useCallback(
         args = call.arguments;
       }
       const target = resolveCloseTarget(args, live);
-      if (call.name === OPEN_TAB_TOOL.function.name) {
+      if (call.name === READ_PAGE_TOOL.function.name) {
+        results.push(await executeReadPage(target, call.name));
+      } else if (call.name === OPEN_TAB_TOOL.function.name) {
         const open = resolveOpenUrl(args);
         if ("url" in open) {
           void chrome.tabs.create({ url: open.url, active: true });
@@ -378,6 +389,31 @@ const system = useCallback(
 
   function stop() {
     ctrlRef.current?.abort();
+  }
+
+  /**
+   * readPage execution — read-only. Gates on the optional page-reading grant
+   * (F6's opt-in), extracts the first matching tab's text, and hands the
+   * model a truncated transcript. Restricted pages (chrome://) reject in
+   * `executeScript` → refusal, nothing happens.
+   */
+  async function executeReadPage(target: CloseTarget, name: string): Promise<string> {
+    if (!("tabs" in target) || target.tabs.length === 0) {
+      return closeResultText(target, name, "read");
+    }
+    const tab = target.tabs[0];
+    if (!(await hasPageReadingPermission())) return readPageRefusalText("no-permission");
+    try {
+      const [res] = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: extractPageText,
+      });
+      const page = res?.result as { title?: string; text?: string } | undefined;
+      if (!page || !page.text) return readPageRefusalText("unreadable");
+      return readPageSuccessText(page.title || tab.title, page.text);
+    } catch {
+      return readPageRefusalText("unreadable");
+    }
   }
 
   /** User clicked a text-claim chip — validate once more, then execute. */

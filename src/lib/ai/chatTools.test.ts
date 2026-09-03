@@ -6,6 +6,7 @@ import {
   JUMP_TAB_TOOL,
   OPEN_TAB_TOOL,
   PIN_TAB_TOOL,
+  READ_PAGE_TOOL,
   SAVE_SESSION_TOOL,
   UNPIN_TAB_TOOL,
   closeResultText,
@@ -16,6 +17,8 @@ import {
   groupResultText,
   jumpResultText,
   openResultText,
+  readPageRefusalText,
+  readPageSuccessText,
   resolveCloseTarget,
   resolveGroupTarget,
   resolveOpenUrl,
@@ -169,6 +172,32 @@ describe("saveSessionResultText", () => {
   it("reports the count and session name", () => {
     expect(saveSessionResultText(7, "Deep work")).toBe(
       'saveSession: saved 7 tab(s) as "Deep work"',
+    );
+  });
+});
+
+describe("READ_PAGE_TOOL", () => {
+  it("is an Ollama-style function tool requiring a title", () => {
+    expect(READ_PAGE_TOOL.type).toBe("function");
+    expect(READ_PAGE_TOOL.function.name).toBe("readPage");
+    expect(READ_PAGE_TOOL.function.parameters.required).toEqual(["title"]);
+  });
+});
+
+describe("readPage result texts", () => {
+  it("builds a success payload with the title and truncated text", () => {
+    const long = "x".repeat(9000);
+    const text = readPageSuccessText("Docs", long, 100);
+    expect(text).toContain('readPage: content of "Docs" (truncated):');
+    expect(text.length).toBeLessThan(300);
+  });
+
+  it("explains each refusal", () => {
+    expect(readPageRefusalText("no-permission")).toBe(
+      'readPage: page-reading is off — enable "Read Pages for AI" in Settings',
+    );
+    expect(readPageRefusalText("unreadable")).toBe(
+      "readPage: couldn't read that page (restricted or unavailable) — nothing happened",
     );
   });
 });
