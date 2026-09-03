@@ -200,6 +200,7 @@ describe("readPage result texts", () => {
     const long = "x".repeat(9000);
     const text = readPageSuccessText("Docs", long, 100);
     expect(text).toContain('readPage: content of "Docs" (truncated):');
+    expect(text).toMatch(/UNTRUSTED DATA/);
     expect(text.length).toBeLessThan(300);
   });
 

@@ -46,6 +46,18 @@ describe("every prompt", () => {
       expect(prompt).not.toMatch(/```/);
     }
   });
+
+  it("frames web-controlled context (titles/page text) as untrusted data in every content-bearing prompt", () => {
+    const prompts = [
+      buildTriagePrompt([tab(1)]),
+      buildSuggestionsPrompt([tab(1)]),
+      buildSessionSummaryPrompt({ name: "s", tabs: [{ title: "t", url: "u" }] }),
+      buildSummarizePagePrompt({ title: "t", text: "body" }),
+    ];
+    for (const prompt of prompts) {
+      expect(prompt).toMatch(/UNTRUSTED/);
+    }
+  });
 });
 
 describe("buildTriagePrompt", () => {
