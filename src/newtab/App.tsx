@@ -104,7 +104,7 @@ export default function App() {
         ) : tabCount === 0 ? (
           <EmptyState />
         ) : viewMode === "stacks" ? (
-          <StacksView />
+          <StacksView onFocus={(goal) => setFocusGoal(goal)} />
         ) : (
           <TimelineView />
         )}

@@ -1,5 +1,6 @@
 import { useCallback } from "react";
 import { useTabStore } from "../../store/tabStore";
+import { summarizeSession } from "../../lib/ai/sessionMemory";
 import type { EnrichedTab, SavedSession } from "../../types/index";
 
 /** Persist a session snapshot and AWAIT the write before returning. */
@@ -22,6 +23,9 @@ export async function persistSession(
     })),
   };
   await chrome.storage.local.set({ sessions: [...existing, session].slice(-50) });
+  // F4 — fire-and-forget AI summary (best-effort, never awaited; gates on
+  // settings inside). The authoritative copy lives in `aiSessionSummaries`.
+  void summarizeSession(session);
 }
 
 /**
