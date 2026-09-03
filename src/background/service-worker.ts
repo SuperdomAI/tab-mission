@@ -15,6 +15,7 @@ import {
   parseTriagePlan,
   triageCandidates,
 } from "../lib/ai/triage";
+import { summarizeSession } from "../lib/ai/sessionMemory";
 
 // ─── Ollama CORS: strip the Origin header for localhost:11434 ────────────────
 // Chrome attaches `Origin: chrome-extension://<id>` to extension requests, and
@@ -392,6 +393,11 @@ chrome.windows.onRemoved.addListener((windowId) =>
       };
       sessions.push(newSession);
       await chrome.storage.local.set({ sessions: sessions.slice(-50) });
+      // F4 — fire-and-forget AI summary for the auto-saved session
+      // (best-effort, never awaited — MV3 may kill the SW mid-generation;
+      // the UI's on-demand summaries always work). The SW fetch direct-
+      // fetches Ollama, so no CORS/proxy concern.
+      void summarizeSession(newSession);
     } catch (e) {
       console.error("[TMC] auto-save session error:", e);
     }

@@ -1,6 +1,8 @@
 import React from "react";
 import { format } from "date-fns";
 import { useSession } from "../hooks/useSession";
+import { useSessionSummaries } from "../hooks/useSessionSummaries";
+import { useTabStore } from "../../store/tabStore";
 
 interface SessionManagerProps {
   open: boolean;
@@ -10,6 +12,8 @@ interface SessionManagerProps {
 export default function SessionManager({ open, onClose }: SessionManagerProps) {
   const { sessions, restoreSession, deleteSession, saveSession, isPending } =
     useSession();
+  const { get } = useSessionSummaries();
+  const settings = useTabStore((s) => s.settings);
 
   function handleSave() {
     const name = prompt(
@@ -105,11 +109,13 @@ export default function SessionManager({ open, onClose }: SessionManagerProps) {
               </p>
             </div>
           ) : (
-            [...sessions].reverse().map((session) => (
-              <div
-                key={session.id}
-                className="bg-surface rounded-xl p-3.5 border border-hairline hover:border-border transition-colors group"
-              >
+            [...sessions].reverse().map((session) => {
+              const summary = get(session.id, settings.aiChatModel)?.summary;
+              return (
+                <div
+                  key={session.id}
+                  className="bg-surface rounded-xl p-3.5 border border-hairline hover:border-border transition-colors group"
+                >
                 <div className="flex items-start justify-between gap-2 mb-2">
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-ink truncate">
@@ -118,6 +124,11 @@ export default function SessionManager({ open, onClose }: SessionManagerProps) {
                     <p className="text-xs text-faint mt-0.5">
                       {format(session.savedAt, "MMM d, yyyy · h:mm a")}
                     </p>
+                    {summary && (
+                      <p className="text-[11px] text-muted leading-snug mt-1 line-clamp-2">
+                        {summary}
+                      </p>
+                    )}
                   </div>
                   <span className="text-xs bg-white/[0.06] text-muted px-2 py-0.5 rounded-full border border-border flex-shrink-0 font-mono tabular-nums">
                     {session.tabs.length} tab
@@ -197,7 +208,8 @@ export default function SessionManager({ open, onClose }: SessionManagerProps) {
                   </button>
                 </div>
               </div>
-            ))
+              );
+            })
           )}
         </div>
       </aside>

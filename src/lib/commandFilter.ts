@@ -1,5 +1,6 @@
 import Fuse from "fuse.js";
-import type { EnrichedTab } from "../types/index";
+import type { EnrichedTab, SavedSession } from "../types/index";
+import type { SessionSummaryEntry } from "./ai/sessionMemory";
 
 /** Single Fuse config for tab search — used only here (no duplicate configs). */
 export function buildTabFuse(tabs: EnrichedTab[]): Fuse<EnrichedTab> {
@@ -19,6 +20,47 @@ export function searchTabs(
   query: string,
   limit = 8,
 ): EnrichedTab[] {
+  if (!query.trim()) return [];
+  return fuse.search(query).slice(0, limit).map((r) => r.item);
+}
+
+/** A session as the F4 palette search sees it (name + AI summary). */
+export interface SessionDoc {
+  id: string;
+  name: string;
+  summary: string;
+}
+
+/**
+ * F4 "Search sessions" — Fuse over session names + AI summaries (Fuse.js
+ * title fallback when AI is off: summaries simply don't exist yet). Merges
+ * the authoritative `aiSessionSummaries` map over the `SavedSession.summary`
+ * backfill.
+ */
+export function buildSessionFuse(
+  sessions: SavedSession[],
+  summaries: Record<string, SessionSummaryEntry>,
+): Fuse<SessionDoc> {
+  const docs: SessionDoc[] = sessions.map((s) => ({
+    id: s.id,
+    name: s.name,
+    summary: summaries[s.id]?.summary ?? s.summary ?? "",
+  }));
+  return new Fuse(docs, {
+    keys: [
+      { name: "name", weight: 0.6 },
+      { name: "summary", weight: 0.4 },
+    ],
+    threshold: 0.4,
+    ignoreLocation: true,
+  });
+}
+
+export function searchSessions(
+  fuse: Fuse<SessionDoc>,
+  query: string,
+  limit = 5,
+): SessionDoc[] {
   if (!query.trim()) return [];
   return fuse.search(query).slice(0, limit).map((r) => r.item);
 }

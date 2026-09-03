@@ -4,9 +4,13 @@ import { useTabStore } from "../../store/tabStore";
 import Overlay from "./Overlay";
 import Favicon from "./Favicon";
 import { useTabActions } from "../hooks/useTabActions";
+import { useSession } from "../hooks/useSession";
+import { useSessionSummaries } from "../hooks/useSessionSummaries";
 import {
   buildTabFuse,
   searchTabs,
+  buildSessionFuse,
+  searchSessions,
   filterCommands,
   type PaletteCommand,
 } from "../../lib/commandFilter";
@@ -27,6 +31,8 @@ export default function CommandPalette({ onFocus, onOpenWorkspaces, onAskAI }: C
   const settings = useTabStore((s) => s.settings);
   const setViewMode = useTabStore((s) => s.setViewMode);
   const { closeMany, hibernateMany, jumpTo } = useTabActions();
+  const { restoreSession } = useSession();
+  const { summaries } = useSessionSummaries();
 
   // ⌘K / Ctrl+K toggles the palette — the ONE owner of this shortcut.
   useEffect(() => {
@@ -46,6 +52,16 @@ export default function CommandPalette({ onFocus, onOpenWorkspaces, onAskAI }: C
 
   const fuse = useMemo(() => buildTabFuse(tabs), [tabs]);
   const tabResults = useMemo(() => searchTabs(fuse, query), [fuse, query]);
+
+  const sessions = useTabStore((s) => s.sessions);
+  const sessionFuse = useMemo(
+    () => buildSessionFuse(sessions, summaries),
+    [sessions, summaries],
+  );
+  const sessionResults = useMemo(
+    () => searchSessions(sessionFuse, query),
+    [sessionFuse, query],
+  );
 
   const commands = useMemo<PaletteCommand[]>(() => {
     const run = (fn: () => void) => () => {
@@ -130,6 +146,28 @@ export default function CommandPalette({ onFocus, onOpenWorkspaces, onAskAI }: C
                   <Favicon tab={t} size={16} rounded={4} />
                   <span className="truncate">{t.title || t.url}</span>
                   <span className="ml-auto font-mono text-[10px] text-faint shrink-0">{t.domain}</span>
+                </Command.Item>
+              ))}
+            </Command.Group>
+          )}
+
+          {sessionResults.length > 0 && (
+            <Command.Group heading="Sessions">
+              {sessionResults.map((s) => (
+                <Command.Item
+                  key={s.id}
+                  value={`session-${s.id}`}
+                  onSelect={() => {
+                    void restoreSession(s.id);
+                    setOpen(false);
+                  }}
+                >
+                  <span className="truncate">{s.name}</span>
+                  {s.summary && (
+                    <span className="ml-auto max-w-[240px] truncate text-[11px] text-faint shrink-0">
+                      {s.summary}
+                    </span>
+                  )}
                 </Command.Item>
               ))}
             </Command.Group>

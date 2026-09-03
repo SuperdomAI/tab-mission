@@ -35,6 +35,8 @@ export interface SavedSession {
   name: string;
   savedAt: number;
   tabs: { title: string; url: string; favIconUrl: string }[];
+  /** F4 AI summary backfill (in-session cache; `aiSessionSummaries` is authoritative). */
+  summary?: string;
 }
 
 export interface AppSettings {

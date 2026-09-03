@@ -258,7 +258,7 @@ Store updates that flow from `chrome.storage.onChanged` are wrapped in `startTra
 | `DomainGroup`        | `domain, tabs`     | —                           | `tabs.remove` (close all in group)                            |
 | `SearchBar`          | `inputRef?`        | `tabs`                      | `tabs.update`, `windows.update`                                |
 | `BulkActions`        | —                  | `tabs, settings`            | `tabs.remove`, `tabs.discard`                                  |
-| `SessionManager`     | `open, onClose`    | `sessions` (useSession)     | `windows.create`, `storage.local.set/get`                     |
+| `SessionManager`     | `open, onClose`    | `sessions` (useSession), `useSessionSummaries` | `windows.create`, `storage.local.set/get`      |
 | `AnalyticsDashboard` | `open, onClose`    | `analytics, tabs`           | —                                                              |
 | `DebriefCard`       | `open`             | `analytics, settings` + `useAIReports` | `storage.local` write (`aiReports`), Ollama via `bgFetch` |
 | `WeeklyReport`      | `open, onClose`    | `analytics`                 | —                                                              |
@@ -266,6 +266,9 @@ Store updates that flow from `chrome.storage.onChanged` are wrapped in `startTra
 | `Settings`          | `open, onClose`    | `settings`                  | `storage.sync.set`                                             |
 | `TimelineView`      | —                  | `tabs, settings` + `useTriagePlan` | `saveAndClose` via `useTabActions` (Clear forgotten, AI triage approve) |
 | `TriageProposal`    | `open, onClose`    | `tabs, settings` + `useTriagePlan` | `storage.local` write (`aiTriagePlan`, `aiIdleDraftDismissedAt`), Ollama via `bgFetch`, `saveAndClose` |
+| `StacksView`        | `onFocus`          | `tabs`                      | —                                                              |
+| `SuggestionsStrip`  | `onFocus`          | `tabs, settings` + `useSuggestions` | `storage.local` write (`aiSuggestions`), Ollama via `bgFetch` |
+| `CommandPalette`    | `onFocus, onOpenWorkspaces, onAskAI` | `tabs, settings, sessions` + `useSessionSummaries` | `windows.create` (session restore), `tabs.update`, `windows.update`, `tabs.remove`, `tabs.discard` |
 | `Tooltip`            | `text, position?, align?` | —                    | —                                                              |
 
 ---
@@ -281,6 +284,8 @@ Store updates that flow from `chrome.storage.onChanged` are wrapped in `startTra
 | `aiReports` | `local` | `AIReportsMap` (see below) | Entries pruned after 30 days |
 | `aiTriagePlan` | `local` | `TriagePlan` (see below) | Single plan, per-source TTL (1 h on-demand / 2 h idle) |
 | `aiIdleDraftDismissedAt` | `local` | `number` (timestamp) | UI-owned notice flag |
+| `aiSuggestions` | `local` | `Suggestions` (see below) | Single plan, TTL 30 min, regen on ≥ 5-tab change |
+| `aiSessionSummaries` | `local` | `SessionSummariesMap` (see below) | Entries pruned after 30 days |
 
 ### `aiReports` (UI-owned, landed in PR B)
 
@@ -307,12 +312,32 @@ aiTriagePlan: {
 
 `aiIdleDraftDismissedAt` (UI-owned, `number`) is the notice flag: the Timeline chip ("AI drafted a cleanup plan while you were away → Review") shows while a fresh idle plan exists with `generatedAt` after the flag; dismissing writes the flag, so the chip reappears only for a genuinely new draft.
 
-### AI cache keys (planned — stages D–F of `docs/AI-FEATURES-PLAN.md`)
+### `aiSuggestions` (UI-owned, landed in PR D)
+
+F3 proactive workspace suggestions. A single object (latest generation wins, not a map) written ONLY by the React layer (`useSuggestions` → `SuggestionsCache` in `src/lib/ai/suggestions.ts`) — the same UI-owned precedent as `aiReports`. `signature` is the `tabSetSignature` of the open tab set that produced the plan; `tabCount` is the open-tab count at generation time. The Stacks strip reuses the plan while the signature matches OR the tab set churned by < 5 tabs, and regenerates when it changed by ≥ 5. Freshness = the `suggestions` task TTL (30 min) + model-mismatch rejection. `dismissed` is the per-plan "hide for this session" flag: ✕ writes it, and only a NEW generation (≥ 5-tab change) resets it.
+
+```
+aiSuggestions: {
+  signature,                                  // tabSetSignature of the open tab set
+  items: [{ goal, tabIds: number[], reason }], // ≤ 2 suggestions, tabIds ⊆ open ids
+  generatedAt, model, tabCount, dismissed
+}
+```
+
+### `aiSessionSummaries` (dual-owned, landed in PR D)
+
+F4 session memory. A map `sessionId → { summary, generatedAt, model }` written by BOTH the React layer (`persistSession` → `summarizeSession`, fire-and-forget) and the service worker (window auto-save, `windows.onRemoved` → the same shared helper) — the `aiTriagePlan` dual-owner precedent, cohered through `SessionSummaryCache` in `src/lib/ai/sessionMemory.ts`. Both paths gate on `ollamaEnabled && aiSessionMemory`, generate with the chat tier, and read-modify-write the map so parallel summaries don't clobber each other (entries pruned after 30 days; TTL = `TASK_TTL_MS.sessionSummary`). `SavedSession.summary` is backfilled as an in-session cache (best-effort — a lost backfill is fine, the map is authoritative and the UI reads map-first). Sessions drawer shows the summary under each session name; ⌘K "Sessions" group Fuse-searches names + summaries (the Fuse.js fallback when AI is off).
+
+```
+aiSessionSummaries: {
+  "session-…": { summary, generatedAt, model }
+}
+```
+
+### AI cache keys (planned — stages E–F of `docs/AI-FEATURES-PLAN.md`)
 
 | Key | Contents |
 | --- | --- |
-| `aiSessionSummaries` | `{ [sessionId]: { summary, generatedAt, model } }` |
-| `aiSuggestions` | `{ signature, items, dismissed }` |
 | `aiReadingList` | capped at 100 entries (F6) |
 | `aiTabEmbeddings` | `{ model, dims, vectors: { [tabId]: number[] } }` — re-embedded when `model` changes |
 

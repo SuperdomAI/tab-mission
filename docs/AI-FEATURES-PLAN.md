@@ -1,6 +1,6 @@
 # AI Features Implementation Plan (v1.3.0 — "Tab Mission Intelligence")
 
-Scope: features 1, 2, 3, 4, 6, 7, 11, 12 from the AI brainstorm. All run on a **local Ollama** instance; nothing leaves the machine. Status: **stages A–C landed** (PR A: shared infra + settings fields; PR B: F1 daily debrief + F11 habits coach + settings model tiers; PR C: F2 AI triage overlay + F12 idle drafts). Remaining: F3/F4 (PR D), F7 (PR E), F6 (PR F).
+Scope: features 1, 2, 3, 4, 6, 7, 11, 12 from the AI brainstorm. All run on a **local Ollama** instance; nothing leaves the machine. Status: **stages A–D landed** (PR A: shared infra + settings fields; PR B: F1 daily debrief + F11 habits coach + settings model tiers; PR C: F2 AI triage overlay + F12 idle drafts; PR D: F3 proactive suggestions + F4 session memory). Remaining: F7 (PR E), F6 (PR F).
 
 ---
 
@@ -85,22 +85,23 @@ Total resident with KV cache ≈ 6-7 GB — comfortable on 16 GB alongside Chrom
 - **UI:** "AI triage" button in `TimelineView.tsx` next to ⌫ Clear forgotten. Opens `TriageProposal` overlay (same two-column visual grammar as `FocusProposal.tsx`): plan list with reasons grouped by category, per-item keep/close override, `Approve` → `saveAndClose("AI triage — <date>", items)` (session-first, reversible, pins excluded). Cache by tab-set signature, TTL 1 h.
 - **Tests:** prompt builder, parser (incl. garbage output), signature invalidation, category grouping.
 
-### F3 — Proactive workspace suggestions
+### F3 — Proactive workspace suggestions — landed in PR D
 - **Inputs:** open tabs (title/domain/windowId), ≥ 8 tabs and Ollama on and suggestion not dismissed this session.
 - **Prompt:** fast model, JSON `{ suggestions: [{ goal, tabIds, reason }] }`, max 2, tabIds subset of open ids.
 - **Generation:** on new-tab load, debounced 3 s, cached by signature; regenerate when tab set changed by ≥ 5 tabs.
-- **UI:** quiet strip on `StacksView.tsx` — one line, mono label `AI suggests`, goal chips ("Launch planning · 12 tabs"). Click → opens existing `FocusProposal` pre-filled with that goal (zero new destructive machinery). Dismiss (×) hides for the session.
+- **UI:** quiet strip on `StacksView.tsx` — one line, mono label `AI suggests`, goal chips ("Launch planning · 12 tabs"). Click → opens existing `FocusProposal` pre-filled with that goal (zero new destructive machinery). Dismiss (×) hides until the next generation.
+- **Storage:** `aiSuggestions = { signature, items: { goal, tabIds, reason }[], generatedAt, model, tabCount, dismissed }` (UI-owned; TTL 30 min; `tabCount` + `dismissed` are additive to the plan doc's shape — the ≥ 5-tab regen rule and the per-plan dismiss flag).
 - **Tests:** prompt builder, output validation (ids ⊆ open), debounce/cache logic.
 
-### F4 — Session memory
+### F4 — Session memory — landed in PR D
 - **Inputs:** a session's tab snapshot (title/url/domain-list). Chat model.
 - **Prompt:** "5-line summary of what this tab set was about, in the past tense." JSON `{ summary }`.
 - **Generation hook points:**
   - UI saves (`persistSession` in useTabActions.ts:6) → fire-and-forget summarization, write `aiSessionSummaries[id]`.
-  - SW auto-save (`windows.onRemoved` in service-worker.ts:357) → SW calls the same helper directly (SW fetch has no Origin header; no CORS issue), writes `aiSessionSummaries`.
-- **UI:** `SessionManager.tsx` shows summary line under session name; `CommandPalette` gains "Search sessions" — embed query (fast) vs. embedded session title+summary (lazy-embedded), cosine top-k. **No AI → Fuse.js title fallback.**
+  - SW auto-save (`windows.onRemoved` in service-worker.ts:372) → SW calls the same shared helper (`summarizeSession`) directly (SW fetch has no Origin header; no CORS issue), writes `aiSessionSummaries`.
+- **UI:** `SessionManager.tsx` shows summary line under session name; `CommandPalette` gains "Search sessions" — Fuse.js over names + summaries (the no-AI fallback IS the Fuse search; semantic embedding lands with F7 in PR E).
 - **Storage:** `SavedSession` gains optional `summary?: string` (in-session cache, backfilled; the authoritative `aiSessionSummaries` map stays separate to avoid touching SW's session writes).
-- **Tests:** summary prompt, embed/merge, fallback path.
+- **Tests:** summary prompt, cache/coercion, summarizeSession orchestration (gating, map write, backfill), fallback path.
 
 ### F6 — Summarize-then-close (needs new optional permissions — the only one)
 - **Permissions:** add `"scripting"` to `optional_permissions`; request `<all_urls>`-style host grants (`http://*/*`, `https://*/*`) **at first use** via `chrome.permissions.request`, behind `aiPageReadingEnabled` in Settings ("Allow reading pages for AI"). Revocable. Store-review note in §6.
@@ -152,7 +153,7 @@ Settings drawer: extend the Local AI section — model fields per tier, "Read pa
 | **A** | `src/lib/ai/` infra: models, cache, prompts, parse, signatures + tests; settings fields | none (no UI) |
 | **B** | F1 debrief + F11 coach (read-only reports, cached) | none |
 | ✅ **C** | F2 triage overlay + F12 idle drafts (session-first close path) | low |
-| **D** | F3 suggestions + F4 session memory (additive storage, SW hook) | low |
+| ✅ **D** | F3 suggestions + F4 session memory (additive storage, SW hook) | low |
 | **E** | F7 semantic ⌘K search (fallback preserved) | low |
 | **F** | F6 summarize-then-close (optional permissions, store-review note) | medium (perms) |
 

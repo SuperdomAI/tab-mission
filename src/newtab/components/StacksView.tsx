@@ -2,9 +2,15 @@ import { useState, useMemo } from "react";
 import { useTabStore, useShallow, selectTabsByDomain, selectDomainsSorted } from "../../store/tabStore";
 import Deck from "./Deck";
 import DeckPopover from "./DeckPopover";
+import SuggestionsStrip from "./SuggestionsStrip";
+
+interface StacksViewProps {
+  /** Open FocusProposal pre-filled with a goal (F3 suggestion chips). */
+  onFocus: (goal: string) => void;
+}
 
 /** Default view: every site as a Wallet-style deck; click → popover. */
-export default function StacksView() {
+export default function StacksView({ onFocus }: StacksViewProps) {
   const tabs = useTabStore((s) => s.tabs);
   const [openDomain, setOpenDomain] = useState<string | null>(null);
 
@@ -22,6 +28,7 @@ export default function StacksView() {
 
   return (
     <>
+      <SuggestionsStrip onFocus={onFocus} />
       <div className="label-mono mb-4 px-1">Your stacks</div>
       <div className="grid gap-[22px_18px] [grid-template-columns:repeat(auto-fill,minmax(240px,1fr))]">
         {domains.map((domain) => (
