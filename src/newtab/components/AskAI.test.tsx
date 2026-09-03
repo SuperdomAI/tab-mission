@@ -74,7 +74,7 @@ describe("AskAI sidebar", () => {
     await sendMessage("hi");
     const port = await waitForPort(0);
     const body = requestBody(port);
-    expect(body.tools).toHaveLength(3);
+    expect(body.tools).toHaveLength(8);
     expect(body.messages[0]).toMatchObject({ role: "system" });
     expect(body.messages[0].content).toContain("Video (youtube.com)");
     expect(body.messages[0].content).not.toContain("tabId");
@@ -464,5 +464,149 @@ describe("AskAI sidebar", () => {
     expect(
       screen.getByText(/Ask about your open tabs/),
     ).toBeInTheDocument();
+  });
+
+  it("executes a jumpTab tool call — activates the existing tab, no new tab", async () => {
+    useTabStore.setState({
+      tabs: [makeTab({ id: 1, title: "Inbox", domain: "mail.google.com", windowId: 7 })],
+    });
+    renderAskAI();
+    await sendMessage("open the inbox");
+    const port = await waitForPort(0);
+    driveStream(port, [
+      {
+        message: {
+          tool_calls: [
+            { function: { name: "jumpTab", arguments: '{"title":"Inbox"}' } },
+          ],
+        },
+      },
+    ]);
+
+    await waitFor(() =>
+      expect(chromeMock().tabs.update).toHaveBeenCalledWith(1, { active: true }),
+    );
+    expect(chromeMock().windows.update).toHaveBeenCalledWith(7, { focused: true });
+    expect(chromeMock().tabs.create).not.toHaveBeenCalled();
+
+    await waitFor(() =>
+      expect(chromeMock().runtime.connect).toHaveBeenCalledTimes(2),
+    );
+    const body2 = requestBody(await waitForPort(1));
+    expect(body2.messages.at(-1)).toMatchObject({
+      role: "tool",
+      content: "jumpTab: activated — Inbox",
+    });
+    driveStream(await waitForPort(1), [{ message: { content: "Done." } }]);
+    await waitFor(() => expect(screen.getByText("Done.")).toBeInTheDocument());
+  });
+
+  it("executes a groupTabs tool call via chrome.tabs.group", async () => {
+    useTabStore.setState({
+      tabs: [
+        makeTab({ id: 1, title: "Inbox", domain: "mail.google.com" }),
+        makeTab({ id: 2, title: "Inbox", domain: "mail.google.com" }),
+      ],
+    });
+    renderAskAI();
+    await sendMessage("group my inbox tabs");
+    const port = await waitForPort(0);
+    driveStream(port, [
+      {
+        message: {
+          tool_calls: [
+            { function: { name: "groupTabs", arguments: '{"titles":["Inbox"]}' } },
+          ],
+        },
+      },
+    ]);
+
+    await waitFor(() =>
+      expect(chromeMock().tabs.group).toHaveBeenCalledWith({ tabIds: [1, 2] }),
+    );
+    const body2 = requestBody(await waitForPort(1));
+    expect(body2.messages.at(-1)).toMatchObject({
+      role: "tool",
+      content: "groupTabs: grouped 2 tab(s) — Inbox · Inbox",
+    });
+    driveStream(await waitForPort(1), [{ message: { content: "Grouped." } }]);
+    await waitFor(() => expect(screen.getByText("Grouped.")).toBeInTheDocument());
+  });
+
+  it("executes a saveSession tool call — persists all open tabs", async () => {
+    renderAskAI();
+    await sendMessage("save my session for later");
+    const port = await waitForPort(0);
+    driveStream(port, [
+      {
+        message: {
+          tool_calls: [
+            { function: { name: "saveSession", arguments: '{"name":"Deep work"}' } },
+          ],
+        },
+      },
+    ]);
+
+    await waitFor(() =>
+      expect(chromeMock().storage.local.set).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sessions: expect.arrayContaining([
+            expect.objectContaining({ name: "Deep work" }),
+          ]),
+        }),
+      ),
+    );
+    const body2 = requestBody(await waitForPort(1));
+    expect(body2.messages.at(-1)).toMatchObject({
+      role: "tool",
+      content: 'saveSession: saved 1 tab(s) as "Deep work"',
+    });
+    driveStream(await waitForPort(1), [{ message: { content: "Saved." } }]);
+    await waitFor(() => expect(screen.getByText("Saved.")).toBeInTheDocument());
+  });
+
+  it("executes pinTab and unpinTab tool calls via tabs.update", async () => {
+    useTabStore.setState({
+      tabs: [makeTab({ id: 1, title: "Inbox", domain: "mail.google.com" })],
+    });
+    renderAskAI();
+    await sendMessage("pin the inbox tab");
+    const port = await waitForPort(0);
+    driveStream(port, [
+      {
+        message: {
+          tool_calls: [
+            { function: { name: "pinTab", arguments: '{"title":"Inbox"}' } },
+          ],
+        },
+      },
+    ]);
+    await waitFor(() =>
+      expect(chromeMock().tabs.update).toHaveBeenCalledWith(1, { pinned: true }),
+    );
+    driveStream(await waitForPort(1), [{ message: { content: "Pinned." } }]);
+    await waitFor(() => expect(screen.getByText("Pinned.")).toBeInTheDocument());
+
+    await sendMessage("unpin it");
+    const port2 = await waitForPort(2);
+    driveStream(port2, [
+      {
+        message: {
+          tool_calls: [
+            { function: { name: "unpinTab", arguments: '{"title":"Inbox"}' } },
+          ],
+        },
+      },
+    ]);
+    await waitFor(() =>
+      expect(chromeMock().tabs.update).toHaveBeenCalledWith(1, { pinned: false }),
+    );
+    const body3 = requestBody(await waitForPort(3));
+    expect(body3.messages.at(-1)).toMatchObject({
+      role: "tool",
+      content: "unpinTab: unpinned — Inbox",
+    });
+    driveStream(await waitForPort(3), [{ message: { content: "Unpinned." } }]);
+    await waitFor(() => expect(screen.getByText("Unpinned.")).toBeInTheDocument());
   });
 });

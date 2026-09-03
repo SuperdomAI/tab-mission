@@ -10,18 +10,28 @@ import {
 } from "../../lib/ollama";
 import {
   CLOSE_TAB_TOOL,
+  GROUP_TABS_TOOL,
   HIBERNATE_TAB_TOOL,
+  JUMP_TAB_TOOL,
   OPEN_TAB_TOOL,
+  PIN_TAB_TOOL,
+  SAVE_SESSION_TOOL,
+  UNPIN_TAB_TOOL,
   closeResultText,
   detectCloseProposals,
   detectHibernateProposals,
+  groupResultText,
+  jumpResultText,
   openResultText,
   resolveCloseTarget,
+  resolveGroupTarget,
   resolveOpenUrl,
+  saveSessionResultText,
   type CloseProposal,
 } from "../../lib/ai/chatTools";
 import { cleanAssistantText } from "../../lib/ai/chatText";
 import Tooltip from "./Tooltip";
+import { persistSession } from "../hooks/useTabActions";
 import type { EnrichedTab } from "../../types/index";
 
 interface AskAIProps {
@@ -59,7 +69,7 @@ const TAB_LIST_CAP = 40;
 export default function AskAI({ open, onClose, onOpenSettings, onClosed }: AskAIProps) {
   const tabs = useTabStore((s) => s.tabs);
   const settings = useTabStore((s) => s.settings);
-  const { closeMany, hibernateMany } = useTabActions();
+  const { closeMany, hibernateMany, jumpTo } = useTabActions();
 
   const [messages, setMessages] = useState<ChatMessageFull[]>([]);
   const [draft, setDraft] = useState("");
@@ -157,6 +167,10 @@ const system = useCallback(
           "stay open. Replying \"Hibernated ...\" without calling hibernateTab is a lie, never do it. " +
           "When the user asks you to open or visit a website, call the openTab tool with a full URL " +
           "(https://...), e.g. openTab { url: \"https://google.com\" } — only http/https URLs open. " +
+          "When the user asks to open or focus a tab that is ALREADY open, call jumpTab with its exact title " +
+          "(never openTab — that would duplicate it). To group tabs, call groupTabs with an array of exact " +
+          "titles. To save all open tabs for later, call saveSession with a short name. To pin or unpin a " +
+          "tab, call pinTab or unpinTab with its exact title. " +
           "Never invent a tab title: only mention or act on tabs that appear in the list below. " +
           "Use the exact title only, without the domain in parentheses. Do not announce the call or show the " +
           "tool name in your reply. After the tool runs you will receive its result and should reply with one " +
@@ -221,20 +235,33 @@ const system = useCallback(
         await streamChat({
           messages: [system(useTabStore.getState().tabs), ...conv],
           model: settings.aiChatModel,
-          tools: [CLOSE_TAB_TOOL, HIBERNATE_TAB_TOOL, OPEN_TAB_TOOL],
+          tools: [
+            CLOSE_TAB_TOOL,
+            HIBERNATE_TAB_TOOL,
+            OPEN_TAB_TOOL,
+            JUMP_TAB_TOOL,
+            GROUP_TABS_TOOL,
+            SAVE_SESSION_TOOL,
+            PIN_TAB_TOOL,
+            UNPIN_TAB_TOOL,
+          ],
           signal: ctrl.signal,
           onDelta: (d) => {
             acc += d;
             setPendingText(cleanAssistantText(acc));
           },
           onToolCall: (name, args) => {
-            if (
-              name === CLOSE_TAB_TOOL.function.name ||
-              name === HIBERNATE_TAB_TOOL.function.name ||
-              name === OPEN_TAB_TOOL.function.name
-            ) {
-              toolCalls.push({ name, arguments: JSON.stringify(args) });
-            }
+            const known = [
+              CLOSE_TAB_TOOL,
+              HIBERNATE_TAB_TOOL,
+              OPEN_TAB_TOOL,
+              JUMP_TAB_TOOL,
+              GROUP_TABS_TOOL,
+              SAVE_SESSION_TOOL,
+              PIN_TAB_TOOL,
+              UNPIN_TAB_TOOL,
+            ].some((t) => t.function.name === name);
+            if (known) toolCalls.push({ name, arguments: JSON.stringify(args) });
           },
           onRetry: () => setToolsOff(true),
         });
@@ -304,6 +331,37 @@ const system = useCallback(
           void hibernateMany(target.tabs);
         }
         results.push(closeResultText(target, call.name, "hibernated"));
+      } else if (call.name === JUMP_TAB_TOOL.function.name) {
+        if ("tabs" in target && target.tabs.length > 0) {
+          void jumpTo(target.tabs[0]); // activates + focuses the window
+        }
+        results.push(jumpResultText(target));
+      } else if (call.name === GROUP_TABS_TOOL.function.name) {
+        const group = resolveGroupTarget(args, live);
+        if ("tabIds" in group && group.tabIds.length > 0) {
+          void chrome.tabs.group({ tabIds: group.tabIds as [number, ...number[]] });
+        }
+        results.push(groupResultText(group));
+      } else if (call.name === SAVE_SESSION_TOOL.function.name) {
+        const rawName = (args as Record<string, unknown> | null)?.name;
+        const name =
+          typeof rawName === "string" && rawName.trim()
+            ? rawName.trim()
+            : `AI session ${new Date().toLocaleDateString()}`;
+        const all = useTabStore.getState().tabs;
+        void persistSession(name, all);
+        results.push(saveSessionResultText(all.length, name));
+      } else if (
+        call.name === PIN_TAB_TOOL.function.name ||
+        call.name === UNPIN_TAB_TOOL.function.name
+      ) {
+        const pinned = call.name === PIN_TAB_TOOL.function.name;
+        if ("tabs" in target) {
+          for (const t of target.tabs) {
+            void chrome.tabs.update(t.id, { pinned });
+          }
+        }
+        results.push(closeResultText(target, call.name, pinned ? "pinned" : "unpinned"));
       } else {
         if ("tabs" in target) {
           const ids = target.tabs.map((t) => t.id);

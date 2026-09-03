@@ -12,6 +12,7 @@ export interface ChromeMock {
   tabs: {
     remove: ReturnType<typeof vi.fn>;
     discard: ReturnType<typeof vi.fn>;
+    group: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
     query: ReturnType<typeof vi.fn>;
     create: ReturnType<typeof vi.fn>;
@@ -52,6 +53,7 @@ export function makeChromeMock(): ChromeMock {
       discard: vi.fn().mockImplementation((id: number) =>
         Promise.resolve({ id, discarded: true }),
       ),
+      group: vi.fn().mockResolvedValue(1),
       update: vi.fn().mockResolvedValue({}),
       query: vi.fn().mockResolvedValue([]),
       create: vi.fn().mockResolvedValue({ id: 999 }),

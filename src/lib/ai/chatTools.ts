@@ -77,6 +77,106 @@ export const OPEN_TAB_TOOL = {
   },
 } as const;
 
+export const JUMP_TAB_TOOL = {
+  type: "function",
+  function: {
+    name: "jumpTab",
+    description:
+      "Activate (focus) an already-open browser tab by its exact title (from the open tabs list). " +
+      "Use this instead of openTab when the tab is already open — the user means that tab. " +
+      "Activates the first matching tab.",
+    parameters: {
+      type: "object",
+      properties: {
+        title: {
+          type: "string",
+          description: "The exact title of the tab to activate.",
+        },
+      },
+      required: ["title"],
+    },
+  },
+} as const;
+
+export const GROUP_TABS_TOOL = {
+  type: "function",
+  function: {
+    name: "groupTabs",
+    description:
+      "Group the given open browser tabs (by exact title) into one Chrome tab group. " +
+      "Pass an array of exact titles from the open tabs list. Pinned tabs are never grouped.",
+    parameters: {
+      type: "object",
+      properties: {
+        titles: {
+          type: "array",
+          items: { type: "string" },
+          description: "Exact titles of the tabs to group.",
+        },
+      },
+      required: ["titles"],
+    },
+  },
+} as const;
+
+export const SAVE_SESSION_TOOL = {
+  type: "function",
+  function: {
+    name: "saveSession",
+    description:
+      "Save ALL currently open tabs as a session snapshot the user can restore later. " +
+      "Use when the user asks to save their session, save for later, or preserve what's open.",
+    parameters: {
+      type: "object",
+      properties: {
+        name: {
+          type: "string",
+          description: "A short human name for the session, e.g. \"Deep work\".",
+        },
+      },
+      required: ["name"],
+    },
+  },
+} as const;
+
+export const PIN_TAB_TOOL = {
+  type: "function",
+  function: {
+    name: "pinTab",
+    description:
+      "Pin one or more open browser tabs by their exact title. Pinned tabs stay open and can never be closed or hibernated from chat.",
+    parameters: {
+      type: "object",
+      properties: {
+        title: {
+          type: "string",
+          description: "The exact title of the tab(s) to pin.",
+        },
+      },
+      required: ["title"],
+    },
+  },
+} as const;
+
+export const UNPIN_TAB_TOOL = {
+  type: "function",
+  function: {
+    name: "unpinTab",
+    description:
+      "Unpin one or more pinned browser tabs by their exact title, restoring normal close/hibernate behavior.",
+    parameters: {
+      type: "object",
+      properties: {
+        title: {
+          type: "string",
+          description: "The exact title of the tab(s) to unpin.",
+        },
+      },
+      required: ["title"],
+    },
+  },
+} as const;
+
 export type CloseTarget =
   | { tabs: EnrichedTab[]; skippedPinned: number }
   | { error: "missing-title" | "no-match" };
@@ -229,6 +329,81 @@ export function openResultText(result: OpenTarget): string {
       : "openTab: invalid URL — nothing opened";
   }
   return `openTab: opened — ${result.url}`;
+}
+
+// ─── jump / group / save / pin — tab-control tools ───────────────────────────
+
+/**
+ * Human summary of a jump-tab result. Only the first match is activated;
+ * extra duplicates are mentioned, not activated.
+ */
+export function jumpResultText(result: CloseTarget, name = "jumpTab"): string {
+  if ("error" in result) {
+    return result.error === "missing-title"
+      ? `${name}: no title given — nothing activated`
+      : `${name}: no open tab with that title — nothing activated`;
+  }
+  if (result.tabs.length === 0) {
+    return result.skippedPinned > 0
+      ? `${name}: nothing activated · ${result.skippedPinned} pinned tab(s) not activated`
+      : `${name}: nothing activated`;
+  }
+  const extra =
+    result.tabs.length > 1 ? ` (${result.tabs.length - 1} duplicate(s) not activated)` : "";
+  const pinnedNote =
+    result.skippedPinned > 0 ? ` · ${result.skippedPinned} pinned tab(s) not activated` : "";
+  return `${name}: activated — ${result.tabs[0].title}${extra}${pinnedNote}`;
+}
+
+export type GroupTarget =
+  | { tabIds: number[]; groupedTitles: string[]; skippedPinned: number }
+  | { error: "missing-titles" | "no-match" };
+
+/**
+ * Validate a model-produced `groupTabs` call. Every title is resolved with
+ * the same exact-title rules as closeTab; unresolvable titles are skipped
+ * (their absence shows up in the result count), pinned never grouped.
+ */
+export function resolveGroupTarget(args: unknown, tabs: EnrichedTab[]): GroupTarget {
+  const obj = typeof args === "object" && args !== null ? (args as Record<string, unknown>) : null;
+  const titles = obj?.titles;
+  if (!Array.isArray(titles) || titles.length === 0) return { error: "missing-titles" };
+  const tabIds: number[] = [];
+  const groupedTitles: string[] = [];
+  let skippedPinned = 0;
+  for (const raw of titles) {
+    if (typeof raw !== "string") continue;
+    const target = resolveCloseTarget({ title: raw }, tabs);
+    if ("tabs" in target) {
+      skippedPinned += target.skippedPinned;
+      for (const t of target.tabs) {
+        if (!tabIds.includes(t.id)) {
+          tabIds.push(t.id);
+          groupedTitles.push(t.title);
+        }
+      }
+    }
+  }
+  if (tabIds.length === 0) return { error: "no-match" };
+  return { tabIds, groupedTitles, skippedPinned };
+}
+
+/** Human summary of a group-tabs result. */
+export function groupResultText(result: GroupTarget, name = "groupTabs"): string {
+  if ("error" in result) {
+    return result.error === "missing-titles"
+      ? `${name}: no titles given — nothing grouped`
+      : `${name}: no open tab matched any title — nothing grouped`;
+  }
+  const titles = result.groupedTitles.join(" · ");
+  const pinnedNote =
+    result.skippedPinned > 0 ? ` · ${result.skippedPinned} pinned tab(s) not grouped` : "";
+  return `${name}: grouped ${result.tabIds.length} tab(s) — ${titles}${pinnedNote}`;
+}
+
+/** Human summary of a save-session result. */
+export function saveSessionResultText(count: number, name: string): string {
+  return `saveSession: saved ${count} tab(s) as "${name}"`;
 }
 
 // ─── hibernate claims (parallel to close — same rules, different tool) ───────
