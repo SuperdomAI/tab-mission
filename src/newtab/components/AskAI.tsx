@@ -239,7 +239,6 @@ const system = useCallback(
   }
 
   const aiOff = !settings.ollamaEnabled;
-  const showEmpty = messages.length === 0 && !streaming && !aiOff;
 
   return (
     <>
@@ -298,23 +297,6 @@ const system = useCallback(
             </div>
           ) : (
             <>
-              {showEmpty && (
-                <div className="space-y-3">
-                  <p className="text-[13px] text-faint">
-                    Ask about your open tabs, or let me close some for you.
-                  </p>
-                  {SUGGESTIONS.map((s) => (
-                    <button
-                      key={s}
-                      onClick={() => send(s)}
-                      className="block w-full text-left text-[12px] text-muted bg-white/[0.04] border border-border rounded-[9px] px-3.5 py-2.5 hover:text-ink hover:bg-white/[0.07] transition-colors"
-                    >
-                      “{s}”
-                    </button>
-                  ))}
-                </div>
-              )}
-
               {messages.map((m, i) => (
                 <MessageBubble key={i} msg={m} />
               ))}
@@ -355,6 +337,30 @@ const system = useCallback(
                         ✕
                       </button>
                     </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Suggestions stay available through the conversation — the
+                  empty-state intro becomes a label once messages exist.
+                  Hidden while streaming so the thread doesn't shift. */}
+              {!streaming && (
+                <div className="space-y-3">
+                  {messages.length === 0 ? (
+                    <p className="text-[13px] text-faint">
+                      Ask about your open tabs, or let me close some for you.
+                    </p>
+                  ) : (
+                    <p className="label-mono">More you can ask</p>
+                  )}
+                  {SUGGESTIONS.map((s) => (
+                    <button
+                      key={s}
+                      onClick={() => send(s)}
+                      className="block w-full text-left text-[12px] text-muted bg-white/[0.04] border border-border rounded-[9px] px-3.5 py-2.5 hover:text-ink hover:bg-white/[0.07] transition-colors"
+                    >
+                      “{s}”
+                    </button>
                   ))}
                 </div>
               )}
