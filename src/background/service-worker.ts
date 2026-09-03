@@ -1,4 +1,5 @@
 import type { EnrichedTab, DailyAnalytics, SavedSession } from "../types/index";
+import { withTabsLock } from "./tabsLock";
 
 // ─── Ollama CORS: strip the Origin header for localhost:11434 ────────────────
 // Chrome attaches `Origin: chrome-extension://<id>` to extension requests, and
@@ -149,6 +150,16 @@ async function updateToday(
   }
 }
 
+// ─── Tab storage mutex ────────────────────────────────────────────────────────
+// Every handler below does an async read-modify-write of the whole `tabs`
+// array. Chrome fires several tab events near-simultaneously (closing a tab
+// fires onRemoved + onActivated together), and without serialization two
+// in-flight handlers interleave on the awaits — a stale full-array write can
+// resurrect a just-closed tab in storage (UI shows ghosts) until the next
+// worker wake runs syncExistingTabs(). Chain all tab mutations through this
+// lock so each handler sees the latest committed array.
+// (Implementation lives in ./tabsLock.ts so it can be unit-tested.)
+
 // ─── Active timing state ──────────────────────────────────────────────────────
 
 let activeTabId: number | null = null;
@@ -186,217 +197,233 @@ async function flushActiveTime(): Promise<void> {
 
 // ─── Tab events ───────────────────────────────────────────────────────────────
 
-chrome.tabs.onCreated.addListener(async (tab) => {
-  if (!isValidTab(tab.url)) return;
+chrome.tabs.onCreated.addListener((tab) =>
+  withTabsLock(async () => {
+    if (!isValidTab(tab.url)) return;
 
-  const tabs = await getTabs();
-  const newTab: EnrichedTab = {
-    id: tab.id!,
-    windowId: tab.windowId,
-    url: tab.url || "",
-    title: tab.title || "Loading...",
-    favIconUrl: tab.favIconUrl || "",
-    domain: extractDomain(tab.url || ""),
-    openedAt: Date.now(),
-    lastActiveAt: null,
-    totalActiveTime: 0,
-    visitCount: 0,
-    isVisited: false,
-    isPinned: tab.pinned,
-    groupId:
-      tab.groupId && tab.groupId !== chrome.tabGroups.TAB_GROUP_ID_NONE
-        ? tab.groupId
-        : null,
-    groupName: null,
-    groupColor: null,
-    isHibernated: false,
-    tags: [],
-  };
+    const tabs = await getTabs();
+    const newTab: EnrichedTab = {
+      id: tab.id!,
+      windowId: tab.windowId,
+      url: tab.url || "",
+      title: tab.title || "Loading...",
+      favIconUrl: tab.favIconUrl || "",
+      domain: extractDomain(tab.url || ""),
+      openedAt: Date.now(),
+      lastActiveAt: null,
+      totalActiveTime: 0,
+      visitCount: 0,
+      isVisited: false,
+      isPinned: tab.pinned,
+      groupId:
+        tab.groupId && tab.groupId !== chrome.tabGroups.TAB_GROUP_ID_NONE
+          ? tab.groupId
+          : null,
+      groupName: null,
+      groupColor: null,
+      isHibernated: false,
+      tags: [],
+    };
 
-  tabs.push(newTab);
-  await setTabs(tabs);
+    tabs.push(newTab);
+    await setTabs(tabs);
 
-  await updateToday((day) => ({
-    ...day,
-    totalTabsOpened: day.totalTabsOpened + 1,
-  }));
-});
+    await updateToday((day) => ({
+      ...day,
+      totalTabsOpened: day.totalTabsOpened + 1,
+    }));
+  }),
+);
 
-chrome.tabs.onRemoved.addListener(async (tabId) => {
-  if (tabId === activeTabId) {
-    await flushActiveTime();
-    activeTabId = null;
-    activationTime = null;
-  }
-
-  const tabs = await getTabs();
-  const filtered = tabs.filter((t) => t.id !== tabId);
-  await setTabs(filtered);
-
-  await updateToday((day) => ({
-    ...day,
-    totalTabsClosed: day.totalTabsClosed + 1,
-    tabDebtScore: filtered.length,
-  }));
-});
-
-chrome.tabs.onActivated.addListener(async ({ tabId, windowId }) => {
-  // flush time for previously active tab
-  await flushActiveTime();
-
-  activeTabId = tabId;
-  activeWindowId = windowId;
-  activationTime = windowFocused && !userIdle ? Date.now() : null;
-
-  const tabs = await getTabs();
-  const idx = tabs.findIndex((t) => t.id === tabId);
-  if (idx < 0) return;
-
-  tabs[idx] = {
-    ...tabs[idx],
-    lastActiveAt: Date.now(),
-    visitCount: tabs[idx].visitCount + 1,
-    isVisited: true,
-  };
-  await setTabs(tabs);
-});
-
-chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
-  if (!changeInfo.url && !changeInfo.title && !changeInfo.favIconUrl) return;
-
-  const tabs = await getTabs();
-  const idx = tabs.findIndex((t) => t.id === tabId);
-  if (idx < 0) {
-    // Tab might not be tracked yet — add it if valid
-    if (isValidTab(tab.url)) {
-      const newTab: EnrichedTab = {
-        id: tab.id!,
-        windowId: tab.windowId,
-        url: tab.url || "",
-        title: tab.title || "",
-        favIconUrl: tab.favIconUrl || "",
-        domain: extractDomain(tab.url || ""),
-        openedAt: Date.now(),
-        lastActiveAt: null,
-        totalActiveTime: 0,
-        visitCount: 0,
-        isVisited: false,
-        isPinned: tab.pinned,
-        groupId:
-          tab.groupId && tab.groupId !== chrome.tabGroups.TAB_GROUP_ID_NONE
-            ? tab.groupId
-            : null,
-        groupName: null,
-        groupColor: null,
-        isHibernated: false,
-        tags: [],
-      };
-      tabs.push(newTab);
-      await setTabs(tabs);
+chrome.tabs.onRemoved.addListener((tabId) =>
+  withTabsLock(async () => {
+    if (tabId === activeTabId) {
+      await flushActiveTime();
+      activeTabId = null;
+      activationTime = null;
     }
-    return;
-  }
 
-  const updated = { ...tabs[idx] };
-  if (changeInfo.url && isValidTab(changeInfo.url)) {
-    updated.url = changeInfo.url;
-    updated.domain = extractDomain(changeInfo.url);
-  } else if (changeInfo.url && !isValidTab(changeInfo.url)) {
-    // navigated to invalid URL — remove tab
+    const tabs = await getTabs();
     const filtered = tabs.filter((t) => t.id !== tabId);
     await setTabs(filtered);
-    return;
-  }
-  if (changeInfo.title) updated.title = changeInfo.title;
-  if (changeInfo.favIconUrl) updated.favIconUrl = changeInfo.favIconUrl;
 
-  tabs[idx] = updated;
-  await setTabs(tabs);
-});
+    await updateToday((day) => ({
+      ...day,
+      totalTabsClosed: day.totalTabsClosed + 1,
+      tabDebtScore: filtered.length,
+    }));
+  }),
+);
+
+chrome.tabs.onActivated.addListener(({ tabId, windowId }) =>
+  withTabsLock(async () => {
+    // flush time for previously active tab
+    await flushActiveTime();
+
+    activeTabId = tabId;
+    activeWindowId = windowId;
+    activationTime = windowFocused && !userIdle ? Date.now() : null;
+
+    const tabs = await getTabs();
+    const idx = tabs.findIndex((t) => t.id === tabId);
+    if (idx < 0) return;
+
+    tabs[idx] = {
+      ...tabs[idx],
+      lastActiveAt: Date.now(),
+      visitCount: tabs[idx].visitCount + 1,
+      isVisited: true,
+    };
+    await setTabs(tabs);
+  }),
+);
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) =>
+  withTabsLock(async () => {
+    if (!changeInfo.url && !changeInfo.title && !changeInfo.favIconUrl) return;
+
+    const tabs = await getTabs();
+    const idx = tabs.findIndex((t) => t.id === tabId);
+    if (idx < 0) {
+      // Tab might not be tracked yet — add it if valid
+      if (isValidTab(tab.url)) {
+        const newTab: EnrichedTab = {
+          id: tab.id!,
+          windowId: tab.windowId,
+          url: tab.url || "",
+          title: tab.title || "",
+          favIconUrl: tab.favIconUrl || "",
+          domain: extractDomain(tab.url || ""),
+          openedAt: Date.now(),
+          lastActiveAt: null,
+          totalActiveTime: 0,
+          visitCount: 0,
+          isVisited: false,
+          isPinned: tab.pinned,
+          groupId:
+            tab.groupId && tab.groupId !== chrome.tabGroups.TAB_GROUP_ID_NONE
+              ? tab.groupId
+              : null,
+          groupName: null,
+          groupColor: null,
+          isHibernated: false,
+          tags: [],
+        };
+        tabs.push(newTab);
+        await setTabs(tabs);
+      }
+      return;
+    }
+
+    const updated = { ...tabs[idx] };
+    if (changeInfo.url && isValidTab(changeInfo.url)) {
+      updated.url = changeInfo.url;
+      updated.domain = extractDomain(changeInfo.url);
+    } else if (changeInfo.url && !isValidTab(changeInfo.url)) {
+      // navigated to invalid URL — remove tab
+      const filtered = tabs.filter((t) => t.id !== tabId);
+      await setTabs(filtered);
+      return;
+    }
+    if (changeInfo.title) updated.title = changeInfo.title;
+    if (changeInfo.favIconUrl) updated.favIconUrl = changeInfo.favIconUrl;
+
+    tabs[idx] = updated;
+    await setTabs(tabs);
+  }),
+);
 
 // ─── Window focus ─────────────────────────────────────────────────────────────
 
-chrome.windows.onFocusChanged.addListener(async (windowId) => {
-  if (windowId === chrome.windows.WINDOW_ID_NONE) {
-    // window lost focus
-    await flushActiveTime();
-    windowFocused = false;
-    activationTime = null;
-  } else {
-    windowFocused = true;
-    activeWindowId = windowId;
-    if (activeTabId !== null && !userIdle) {
-      activationTime = Date.now();
+chrome.windows.onFocusChanged.addListener((windowId) =>
+  withTabsLock(async () => {
+    if (windowId === chrome.windows.WINDOW_ID_NONE) {
+      // window lost focus
+      await flushActiveTime();
+      windowFocused = false;
+      activationTime = null;
+    } else {
+      windowFocused = true;
+      activeWindowId = windowId;
+      if (activeTabId !== null && !userIdle) {
+        activationTime = Date.now();
+      }
     }
-  }
-});
+  }),
+);
 
 // ─── Window removed → auto-save session ──────────────────────────────────────
 
-chrome.windows.onRemoved.addListener(async (windowId) => {
-  try {
-    const tabs = await getTabs();
-    const windowTabs = tabs.filter((t) => t.windowId === windowId);
-    if (windowTabs.length === 0) return;
+chrome.windows.onRemoved.addListener((windowId) =>
+  withTabsLock(async () => {
+    try {
+      const tabs = await getTabs();
+      const windowTabs = tabs.filter((t) => t.windowId === windowId);
+      if (windowTabs.length === 0) return;
 
-    const result = (await chrome.storage.local.get("sessions")) as {
-      sessions?: SavedSession[];
-    };
-    const sessions: SavedSession[] = result.sessions ?? [];
-    const newSession: SavedSession = {
-      id: `auto-${Date.now()}`,
-      name: `Auto-save: ${new Date().toLocaleString()}`,
-      savedAt: Date.now(),
-      tabs: windowTabs.map((t) => ({
-        title: t.title,
-        url: t.url,
-        favIconUrl: t.favIconUrl,
-      })),
-    };
-    sessions.push(newSession);
-    await chrome.storage.local.set({ sessions: sessions.slice(-50) });
-  } catch (e) {
-    console.error("[TMC] auto-save session error:", e);
-  }
-});
+      const result = (await chrome.storage.local.get("sessions")) as {
+        sessions?: SavedSession[];
+      };
+      const sessions: SavedSession[] = result.sessions ?? [];
+      const newSession: SavedSession = {
+        id: `auto-${Date.now()}`,
+        name: `Auto-save: ${new Date().toLocaleString()}`,
+        savedAt: Date.now(),
+        tabs: windowTabs.map((t) => ({
+          title: t.title,
+          url: t.url,
+          favIconUrl: t.favIconUrl,
+        })),
+      };
+      sessions.push(newSession);
+      await chrome.storage.local.set({ sessions: sessions.slice(-50) });
+    } catch (e) {
+      console.error("[TMC] auto-save session error:", e);
+    }
+  }),
+);
 
 // ─── Idle detection ───────────────────────────────────────────────────────────
 
 chrome.idle.setDetectionInterval(60);
 
-chrome.idle.onStateChanged.addListener(async (state) => {
-  if (state === "idle" || state === "locked") {
-    await flushActiveTime();
-    userIdle = true;
-    activationTime = null;
-  } else {
-    userIdle = false;
-    if (activeTabId !== null && windowFocused) {
-      activationTime = Date.now();
+chrome.idle.onStateChanged.addListener((state) =>
+  withTabsLock(async () => {
+    if (state === "idle" || state === "locked") {
+      await flushActiveTime();
+      userIdle = true;
+      activationTime = null;
+    } else {
+      userIdle = false;
+      if (activeTabId !== null && windowFocused) {
+        activationTime = Date.now();
+      }
     }
-  }
-});
+  }),
+);
 
 // ─── Periodic snapshot alarm ──────────────────────────────────────────────────
 
 chrome.alarms.create("peakTabSnapshot", { periodInMinutes: 1 });
 
-chrome.alarms.onAlarm.addListener(async (alarm) => {
-  if (alarm.name === "peakTabSnapshot") {
-    await flushActiveTime();
-    try {
-      const allTabs = await chrome.tabs.query({});
-      const validCount = allTabs.filter((t) => isValidTab(t.url)).length;
-      await updateToday((day) => ({
-        ...day,
-        peakTabCount: Math.max(day.peakTabCount, validCount),
-        tabDebtScore: validCount,
-      }));
-    } catch (e) {
-      console.error("[TMC] peak snapshot error:", e);
+chrome.alarms.onAlarm.addListener((alarm) =>
+  withTabsLock(async () => {
+    if (alarm.name === "peakTabSnapshot") {
+      await flushActiveTime();
+      try {
+        const allTabs = await chrome.tabs.query({});
+        const validCount = allTabs.filter((t) => isValidTab(t.url)).length;
+        await updateToday((day) => ({
+          ...day,
+          peakTabCount: Math.max(day.peakTabCount, validCount),
+          tabDebtScore: validCount,
+        }));
+      } catch (e) {
+        console.error("[TMC] peak snapshot error:", e);
+      }
     }
-  }
-});
+  }),
+);
 
 // ─── Sync existing tabs on startup ───────────────────────────────────────────
 
@@ -446,4 +473,4 @@ async function syncExistingTabs(): Promise<void> {
   }
 }
 
-syncExistingTabs();
+withTabsLock(syncExistingTabs);

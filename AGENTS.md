@@ -1,6 +1,6 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to coding agents (opencode) when working with code in this repository.
 
 ## What this is
 
@@ -10,12 +10,14 @@ A Manifest V3 Chrome extension that **replaces the new tab page** with a tab man
 
 ```bash
 npm install
-npm run dev      # vite build --watch — rebuilds dist/ on save
-npm run build    # production build → dist/
-npx tsc --noEmit # typecheck (no script for it; tsconfig is noEmit)
+npm run dev        # vite build --watch — rebuilds dist/ on save
+npm run build      # production build → dist/
+npm run test       # vitest (watch)
+npm run test:run   # vitest run
+npm run typecheck  # tsc --noEmit
 ```
 
-There is **no test runner and no lint script** — `dev` and `build` are the only npm scripts. Typecheck manually with `tsc --noEmit`.
+CI (`.github/workflows/ci.yml`) runs `typecheck` + `test:run` + `build` on every push/PR to `main`.
 
 **Loading/reloading the extension:** Build, then in `chrome://extensions/` (Developer mode on) → **Load unpacked** → select `dist/`. After any rebuild you must click **↺ Reload** on the extension card — Vite watch rebuilds files but does not reload the extension. `dist/` is gitignored.
 
