@@ -8,6 +8,7 @@ import {
   resolveModel,
   resolveEmbedModel,
   isRecommendedModel,
+  pickMissingModels,
 } from "./models";
 import { DEFAULT_SETTINGS } from "../../types/index";
 
@@ -88,5 +89,37 @@ describe("isRecommendedModel / NUM_CTX", () => {
   it("locks the plan's suggested context windows", () => {
     expect(NUM_CTX.fast).toBe(4096);
     expect(NUM_CTX.chat).toBe(8192);
+  });
+});
+
+describe("pickMissingModels", () => {
+  const defaults = { ...DEFAULT_PROFILE };
+
+  it("keeps a profile when nothing is installed", () => {
+    expect(pickMissingModels(defaults, [])).toEqual(defaults);
+  });
+
+  it("keeps tiers the user already chose when installed", () => {
+    const current = {
+      fast: "mistral",
+      chat: "qwen2.5:7b-instruct-q4_K_M",
+      embed: "nomic-embed-text",
+    };
+    expect(pickMissingModels(current, ["mistral", "qwen2.5:7b-instruct-q4_K_M", "nomic-embed-text"])).toEqual(current);
+  });
+
+  it("fills only the tiers that are not installed", () => {
+    const installed = ["gemma3:4b-instruct-q4_K_M"];
+    const picked = pickMissingModels(defaults, installed);
+    expect(picked.fast).toBe("gemma3:4b-instruct-q4_K_M"); // no fast model installed → first installed
+    expect(picked.chat).toBe("gemma3:4b-instruct-q4_K_M"); // the 8 GB chat recommendation
+    expect(picked.embed).toBe("gemma3:4b-instruct-q4_K_M"); // embed falls back to any installed
+  });
+
+  it("never picks an uninstalled model", () => {
+    const picked = pickMissingModels(defaults, ["mistral"]);
+    expect(["mistral"]).toContain(picked.fast);
+    expect(["mistral"]).toContain(picked.chat);
+    expect(["mistral"]).toContain(picked.embed);
   });
 });

@@ -31,12 +31,12 @@ export default function AskAI({ open, onClose }: { open: boolean; onClose: () =>
     try {
       const granted = await ensureOllamaPermission();
       if (!granted) throw new Error("permission to reach localhost was denied");
-      const reply = await chat([system, ...next], settings.ollamaModel);
+      const reply = await chat([system, ...next], settings.aiChatModel);
       setMessages([...next, { role: "assistant", content: reply }]);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       const hint = /404/.test(msg)
-        ? `Model "${settings.ollamaModel}" not found. Set an installed model in Settings → Local AI.`
+        ? `Model "${settings.aiChatModel}" not found. Set an installed model in Settings → Local AI.`
         : "Is Ollama running? Start it with OLLAMA_ORIGINS allowing this extension (Settings → Local AI).";
       setMessages([
         ...next,
