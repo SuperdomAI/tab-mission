@@ -7,6 +7,7 @@ import type {
 import { mergeSettings } from "../types/index";
 import { withTabsLock } from "./tabsLock";
 import { generate } from "../lib/ollama";
+import { streamOllamaFetch } from "../lib/ollama";
 import { buildTriagePrompt } from "../lib/ai/prompts";
 import { tabSetSignature } from "../lib/ai/signatures";
 import {
@@ -79,6 +80,21 @@ chrome.runtime.onMessage.addListener(
     return true; // keep the message channel open for the async response
   },
 );
+
+// ─── Ollama streaming proxy (Ask AI sidebar) ─────────────────────────────────
+// The page opens a port named "ollama-stream" and posts one `stream-request`;
+// we forward each NDJSON line of the streamed `/api/chat` response back to
+// the port. An open port keeps the MV3 worker alive for the duration of the
+// stream, so the incremental response is never cut short.
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name !== "ollama-stream") return;
+  port.onMessage.addListener(
+    (msg: { type?: string; path?: string; init?: { method?: string; body?: string } }) => {
+      if (msg?.type !== "stream-request") return;
+      void streamOllamaFetch(port, msg.path ?? "/api/chat", msg.init);
+    },
+  );
+});
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 

@@ -56,7 +56,7 @@ Defaults resolve against installed models (extend `toggleOllama` auto-pick in Se
 
 | Tier | Task | Model (Ollama tag) | Size | Why |
 |---|---|---|---|---|
-| **Chat** | F1 debrief, F4 session summaries, F6 summarize, F11 coach | `qwen2.5:7b-instruct-q4_K_M` | ~4.7 GB | Most reliable JSON + instruction following at 7B; fast on Apple Silicon |
+| **Chat** | F1 debrief, F4 session summaries, F6 summarize, F11 coach, Ask AI | `qwen3:8b` | ~5.2 GB | Qwen3 8B — native tool calling (closeTab), best-in-class 8B agent reliability; ~6 GB resident |
 | **Chat alt** | prose-heavy output | `llama3.1:8b-instruct-q4_K_M` | ~4.9 GB | Slightly better natural prose; pick if prose reads stilted |
 | **Fast** | F2 triage, F3 suggestions, F12 drafts, F7 query intent | `qwen2.5:3b-instruct-q4_K_M` | ~2.0 GB | Sub-second classifications; JSON format support |
 | **Embed** | F7 semantic search | `nomic-embed-text` | ~274 MB | Standard local embedding (768-dim) |

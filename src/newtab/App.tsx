@@ -41,6 +41,7 @@ export default function App() {
   const [focusGoal, setFocusGoal] = useState<string | null>(null);
   const [toast, setToast] = useState<{ count: number } | null>(null);
   const [readToast, setReadToast] = useState<ReadingEntry | null>(null);
+  const [chatToast, setChatToast] = useState<{ title: string; url: string } | null>(null);
 
   const { undoLast } = useWorkspaces();
   const { summarizeAndClose, undoEntry } = useReadingList();
@@ -56,6 +57,12 @@ export default function App() {
     const id = setTimeout(() => setReadToast(null), 8000);
     return () => clearTimeout(id);
   }, [readToast]);
+
+  useEffect(() => {
+    if (!chatToast) return;
+    const id = setTimeout(() => setChatToast(null), 8000);
+    return () => clearTimeout(id);
+  }, [chatToast]);
 
   // F6 — summarize-then-close: fire the pipeline and surface the undo toast
   // only when an entry was actually saved (restricted pages / AI down → null).
@@ -86,6 +93,23 @@ export default function App() {
         </span>
         <div className="flex-1" />
         <ViewSwitcher />
+        <Tooltip text="Ask AI about your tabs">
+          <button
+            onClick={() => setShowAskAI(true)}
+            aria-label="Ask AI"
+            className="h-8 flex items-center gap-1.5 px-3.5 rounded-[9px] bg-accent text-white text-[12px] font-medium hover:brightness-110 transition-all"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
+              />
+            </svg>
+            Ask AI
+          </button>
+        </Tooltip>
         <Tooltip text="Analytics">
           <button
             onClick={() => setShowAnalytics(true)}
@@ -179,7 +203,15 @@ export default function App() {
         onDone={(count) => count > 0 && setToast({ count })}
       />
       <WorkspacesManager open={showWorkspaces} onClose={() => setShowWorkspaces(false)} />
-      <AskAI open={showAskAI} onClose={() => setShowAskAI(false)} />
+      <AskAI
+        open={showAskAI}
+        onClose={() => setShowAskAI(false)}
+        onOpenSettings={() => {
+          setShowAskAI(false);
+          setShowSettings(true);
+        }}
+        onClosed={(tab) => setChatToast(tab)}
+      />
 
       {/* ── Undo toast (workspaces) ────────────────────────────────── */}
       {toast && (
@@ -209,6 +241,24 @@ export default function App() {
             onClick={async () => {
               await undoEntry(readToast);
               setReadToast(null);
+            }}
+            className="text-[12px] text-accent font-medium hover:brightness-110"
+          >
+            Undo
+          </button>
+        </div>
+      )}
+
+      {/* ── Undo toast (Ask AI closed a tab) ───────────────────────── */}
+      {chatToast && (
+        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[60] flex items-center gap-3 bg-popover border border-border rounded-[12px] px-4 py-3 shadow-[0_24px_60px_-20px_#000] animate-fade-in-up">
+          <span className="text-[13px] text-ink line-clamp-1 max-w-[320px]">
+            Closed · {chatToast.title}
+          </span>
+          <button
+            onClick={async () => {
+              await chrome.tabs.create({ url: chatToast.url, active: false });
+              setChatToast(null);
             }}
             className="text-[12px] text-accent font-medium hover:brightness-110"
           >

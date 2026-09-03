@@ -30,7 +30,12 @@ export interface ChromeMock {
     };
   };
   tabGroups: { TAB_GROUP_ID_NONE: number };
-  runtime: { getURL: (p: string) => string; id: string };
+  runtime: {
+    getURL: (p: string) => string;
+    id: string;
+    connect: ReturnType<typeof vi.fn>;
+    onConnect: { addListener: ReturnType<typeof vi.fn> };
+  };
   scripting: { executeScript: ReturnType<typeof vi.fn> };
   permissions: {
     contains: ReturnType<typeof vi.fn>;
@@ -71,6 +76,8 @@ export function makeChromeMock(): ChromeMock {
     runtime: {
       getURL: (p: string) => `chrome-extension://test-ext-id${p}`,
       id: "test-ext-id",
+      connect: vi.fn().mockImplementation(() => makeFakePort()),
+      onConnect: { addListener: vi.fn() },
     },
     scripting: {
       // Resolves with the injected function's result by default.
@@ -82,6 +89,34 @@ export function makeChromeMock(): ChromeMock {
       remove: vi.fn().mockResolvedValue(true),
     },
   };
+}
+
+export interface FakePort {
+  name: string;
+  postMessage: ReturnType<typeof vi.fn>;
+  disconnect: ReturnType<typeof vi.fn>;
+  _onMessage: ReturnType<typeof vi.fn>;
+  _onDisconnect: ReturnType<typeof vi.fn>;
+}
+
+/** A controllable port double for streaming tests. */
+export function makeFakePort(name = "ollama-stream"): FakePort {
+  const port: FakePort = {
+    name,
+    postMessage: vi.fn(),
+    disconnect: vi.fn(),
+    _onMessage: vi.fn(),
+    _onDisconnect: vi.fn(),
+  };
+  // Registering a listener records the call (mock.calls) so tests can
+  // retrieve and drive it via `_onMessage.mock.calls[0][0]`.
+  (port as unknown as { onMessage: unknown }).onMessage = {
+    addListener: (fn: (msg: unknown) => void) => port._onMessage(fn),
+  };
+  (port as unknown as { onDisconnect: unknown }).onDisconnect = {
+    addListener: (fn: () => void) => port._onDisconnect(fn),
+  };
+  return port;
 }
 
 export function installChromeMock(): ChromeMock {
