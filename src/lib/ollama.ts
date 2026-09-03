@@ -28,12 +28,15 @@ interface BgResult {
  * extension PAGE sends `Origin: chrome-extension://…`, which Ollama's CORS gate
  * rejects with 403. A fetch from the background carries no web origin, so the
  * gate passes — the standard pattern for extensions talking to a local server.
- * Falls back to a direct fetch in non-extension contexts (tests). Exported so
- * the service worker and AI layer can reuse the same transport.
+ * Falls back to a direct fetch in non-extension contexts (tests) and in the
+ * service worker itself (no `window`): the SW is where the proxy listener
+ * lives, so proxying through it would be a pointless (and unresolvable)
+ * round-trip. Exported so the service worker and AI layer can reuse the same
+ * transport.
  */
 export async function bgFetch(path: string, init?: BgInit): Promise<BgResult> {
   const rt = (globalThis as { chrome?: typeof chrome }).chrome?.runtime;
-  if (rt?.sendMessage) {
+  if (rt?.sendMessage && typeof window !== "undefined") {
     return (await rt.sendMessage({ type: "ollama-fetch", path, init })) as BgResult;
   }
   const r = await fetch(`${OLLAMA_BASE}${path}`, {

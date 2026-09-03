@@ -1,6 +1,6 @@
 # AI Features Implementation Plan (v1.3.0 — "Tab Mission Intelligence")
 
-Scope: features 1, 2, 3, 4, 6, 7, 11, 12 from the AI brainstorm. All run on a **local Ollama** instance; nothing leaves the machine. Status: **stages A–B landed** (PR A: shared infra + settings fields; PR B: F1 daily debrief + F11 habits coach + settings model tiers). Remaining: F2/F12 (PR C), F3/F4 (PR D), F7 (PR E), F6 (PR F).
+Scope: features 1, 2, 3, 4, 6, 7, 11, 12 from the AI brainstorm. All run on a **local Ollama** instance; nothing leaves the machine. Status: **stages A–C landed** (PR A: shared infra + settings fields; PR B: F1 daily debrief + F11 habits coach + settings model tiers; PR C: F2 AI triage overlay + F12 idle drafts). Remaining: F3/F4 (PR D), F7 (PR E), F6 (PR F).
 
 ---
 
@@ -79,7 +79,7 @@ Total resident with KV cache ≈ 6-7 GB — comfortable on 16 GB alongside Chrom
 - **Storage:** `aiReports[date]`. **UI:** new `DebriefCard` component inside `AnalyticsDashboard.tsx` (keeps design system: label-mono heading, muted body, no emoji).
 - **Tests:** prompt builder, parser, cache invalidation on new data.
 
-### F2 — Tab-debt triage plan ("AI triage")
+### F2 — Tab-debt triage plan ("AI triage") — landed in PR C
 - **Inputs:** candidate tabs from existing selectors — `clearableForgotten` (bucketByRecency.ts), `selectZombies`, `selectUnvisited` (bulkSelectors.ts) — with `{ id, title, domain, openedAt, lastActiveAt, visitCount }`. Cap list at 40 tabs (prompt size).
 - **Prompt:** fast model, JSON: `{ items: [{ tabId, action: "close"|"keep", reason, category: "duplicate"|"same-thread"|"stale"|"unvisited"|"junk" }] }`. `format: "json"` + `parse.ts` fallback.
 - **UI:** "AI triage" button in `TimelineView.tsx` next to ⌫ Clear forgotten. Opens `TriageProposal` overlay (same two-column visual grammar as `FocusProposal.tsx`): plan list with reasons grouped by category, per-item keep/close override, `Approve` → `saveAndClose("AI triage — <date>", items)` (session-first, reversible, pins excluded). Cache by tab-set signature, TTL 1 h.
@@ -124,7 +124,7 @@ Total resident with KV cache ≈ 6-7 GB — comfortable on 16 GB alongside Chrom
 - **UI:** "Coach" section in `WeeklyReport.tsx`, cached per ISO week in `aiReports`. Regenerate button. Never interrupts (drawer-only, by design).
 - **Tests:** prompt, parser, week-key cache.
 
-### F12 — Idle-time draft plans
+### F12 — Idle-time draft plans — landed in PR C
 - **Mechanics:** `chrome.idle.onStateChanged` → on transition to `"idle"`, if Ollama on + ≥ 8 tabs + triage signature differs from last draft → fire-and-forget F2 generation in the **SW** (async; do not await; never wake-lock). Write `aiTriagePlan` with `source: "idle"`. TTL 2 h.
 - **UI:** on return to `active`, a quiet chip on the Timeline: "AI drafted a cleanup plan while you were away → Review". Click → `TriageProposal`. Dismiss clears the flag.
 - **Risk note:** SW may die mid-generation (MV3). Draft is best-effort; on-demand triage (§F2) always works. Do not retry storms.
@@ -151,7 +151,7 @@ Settings drawer: extend the Local AI section — model fields per tier, "Read pa
 |---|---|---|
 | **A** | `src/lib/ai/` infra: models, cache, prompts, parse, signatures + tests; settings fields | none (no UI) |
 | **B** | F1 debrief + F11 coach (read-only reports, cached) | none |
-| **C** | F2 triage overlay + F12 idle drafts (session-first close path) | low |
+| ✅ **C** | F2 triage overlay + F12 idle drafts (session-first close path) | low |
 | **D** | F3 suggestions + F4 session memory (additive storage, SW hook) | low |
 | **E** | F7 semantic ⌘K search (fallback preserved) | low |
 | **F** | F6 summarize-then-close (optional permissions, store-review note) | medium (perms) |

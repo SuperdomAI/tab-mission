@@ -142,7 +142,7 @@ Re-registers all event listeners at top level on every startup (MV3 service work
 | `chrome.tabs.onUpdated`                   | Sync `title`, `url`, `favIconUrl`, `domain` changes; remove tab if URL becomes invalid |
 | `chrome.windows.onFocusChanged`           | Pause/resume time tracking on window blur/focus                          |
 | `chrome.windows.onRemoved`                | Auto-save that window's tabs as a `SavedSession` (`"Auto-save: [date]"`) |
-| `chrome.idle.onStateChanged`              | Pause time accumulation when idle/locked (60s detection interval)        |
+| `chrome.idle.onStateChanged`              | Pause time accumulation when idle/locked (60s detection interval); on `"idle"`, fire-and-forget an F12 triage draft (Ollama on + `aiTriage`/`aiIdleDrafts` on + ≥ 8 tabs + tab-set signature changed since the last draft) |
 | `chrome.alarms.onAlarm` (peakTabSnapshot) | Fires every 60s — queries live tab count, updates `peakTabCount` + `tabDebtScore` |
 
 ### Time tracking state machine
@@ -264,6 +264,8 @@ Store updates that flow from `chrome.storage.onChanged` are wrapped in `startTra
 | `WeeklyReport`      | `open, onClose`    | `analytics`                 | —                                                              |
 | `CoachCard`         | `open`             | `analytics, settings` + `useAIReports` | `storage.local` write (`aiReports`), Ollama via `bgFetch` |
 | `Settings`          | `open, onClose`    | `settings`                  | `storage.sync.set`                                             |
+| `TimelineView`      | —                  | `tabs, settings` + `useTriagePlan` | `saveAndClose` via `useTabActions` (Clear forgotten, AI triage approve) |
+| `TriageProposal`    | `open, onClose`    | `tabs, settings` + `useTriagePlan` | `storage.local` write (`aiTriagePlan`, `aiIdleDraftDismissedAt`), Ollama via `bgFetch`, `saveAndClose` |
 | `Tooltip`            | `text, position?, align?` | —                    | —                                                              |
 
 ---
@@ -277,6 +279,8 @@ Store updates that flow from `chrome.storage.onChanged` are wrapped in `startTra
 | `sessions`  | `local` | `SavedSession[]`   | Last 50 sessions |
 | `settings`  | `sync`  | `AppSettings`      | Single object    |
 | `aiReports` | `local` | `AIReportsMap` (see below) | Entries pruned after 30 days |
+| `aiTriagePlan` | `local` | `TriagePlan` (see below) | Single plan, per-source TTL (1 h on-demand / 2 h idle) |
+| `aiIdleDraftDismissedAt` | `local` | `number` (timestamp) | UI-owned notice flag |
 
 ### `aiReports` (UI-owned, landed in PR B)
 
@@ -289,11 +293,24 @@ aiReports: {
 }
 ```
 
-### AI cache keys (planned — stages C–F of `docs/AI-FEATURES-PLAN.md`)
+### `aiTriagePlan` (dual-owned, landed in PR C)
+
+F2 tab-debt triage + F12 idle drafts. A single plan object (latest wins, not a map) written by BOTH the React layer (on-demand, source `"on-demand"`) and the service worker (idle drafts, source `"idle"`); both sides coerce through `TriageCache` in `src/lib/ai/triage.ts`. `signature` is the `tabSetSignature` of the candidate list that produced the plan, so a plan is reused only while the candidate set is unchanged; freshness is per source — 1 h on-demand (`TASK_TTL_MS.triage`), 2 h idle (a "while you were away" notice must outlive a short idle) — plus model-mismatch rejection.
+
+```
+aiTriagePlan: {
+  signature,                                  // tabSetSignature of the candidates
+  items: [{ tabId, reason, action: "close"|"keep", category: "duplicate"|"same-thread"|"stale"|"unvisited"|"junk" }],
+  generatedAt, source: "on-demand"|"idle", model
+}
+```
+
+`aiIdleDraftDismissedAt` (UI-owned, `number`) is the notice flag: the Timeline chip ("AI drafted a cleanup plan while you were away → Review") shows while a fresh idle plan exists with `generatedAt` after the flag; dismissing writes the flag, so the chip reappears only for a genuinely new draft.
+
+### AI cache keys (planned — stages D–F of `docs/AI-FEATURES-PLAN.md`)
 
 | Key | Contents |
 | --- | --- |
-| `aiTriagePlan` | `{ signature, items, generatedAt, source: "on-demand" \| "idle" }` |
 | `aiSessionSummaries` | `{ [sessionId]: { summary, generatedAt, model } }` |
 | `aiSuggestions` | `{ signature, items, dismissed }` |
 | `aiReadingList` | capped at 100 entries (F6) |
