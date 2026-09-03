@@ -15,9 +15,23 @@ describe("mergeSettings", () => {
     const merged = mergeSettings(legacy);
     expect(merged.theme).toBe("light");
     expect(merged.ollamaModel).toBe("mistral");
-    expect(merged.aiChatModel).toBe(DEFAULT_SETTINGS.aiChatModel);
     expect(merged.aiDebrief).toBe(true);
     expect(merged.aiPageReadingEnabled).toBe(false);
+  });
+
+  it("carries a user-chosen legacy ollamaModel into aiChatModel once", () => {
+    const merged = mergeSettings({ ollamaModel: "mistral" });
+    expect(merged.aiChatModel).toBe("mistral");
+  });
+
+  it("does not carry the legacy default model over", () => {
+    const merged = mergeSettings({ ollamaModel: "llama3.2" });
+    expect(merged.aiChatModel).toBe(DEFAULT_SETTINGS.aiChatModel);
+  });
+
+  it("never overwrites an explicitly set aiChatModel", () => {
+    const merged = mergeSettings({ ollamaModel: "mistral", aiChatModel: "custom" });
+    expect(merged.aiChatModel).toBe("custom");
   });
 
   it("lets stored values override defaults", () => {

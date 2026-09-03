@@ -6,6 +6,7 @@ import {
 } from "../../store/analyticsStore";
 import { useTabStore, useShallow } from "../../store/tabStore";
 import WeeklyReport from "./WeeklyReport";
+import DebriefCard from "./DebriefCard";
 
 interface AnalyticsDashboardProps {
   open: boolean;
@@ -107,6 +108,9 @@ export default function AnalyticsDashboard({
         </div>
 
         <div className="flex-1 overflow-y-auto p-5 space-y-6">
+          {/* Today's debrief (F1) — hidden when AI is off */}
+          <DebriefCard open={open} />
+
           {/* Current snapshot */}
           <section>
             <h3 className="label-mono mb-3">Right Now</h3>

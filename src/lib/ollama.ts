@@ -1,4 +1,5 @@
 import type { EnrichedTab } from "../types/index";
+import { NUM_CTX, type TextTask } from "./ai/models";
 
 export const OLLAMA_BASE = "http://localhost:11434";
 // Chrome match patterns must NOT include a port — request host-wide access.
@@ -136,6 +137,32 @@ export async function chat(messages: ChatMessage[], model: string): Promise<stri
   if (!res.ok) throw new Error(`Ollama ${res.status}`);
   const data = JSON.parse(res.body) as { message?: { content?: string } };
   return data.message?.content ?? "";
+}
+
+/**
+ * JSON-mode completion via `/api/generate`, with the tier's suggested context
+ * window (`num_ctx` 4096 fast / 8192 chat per `docs/AI-FEATURES-PLAN.md` §2).
+ * The AI layer always pairs this with `parse.ts` fallbacks — never trust the
+ * raw output.
+ */
+export async function generate(
+  prompt: string,
+  model: string,
+  ctx: TextTask = "chat",
+): Promise<string> {
+  const res = await bgFetch("/api/generate", {
+    method: "POST",
+    body: JSON.stringify({
+      model,
+      prompt,
+      stream: false,
+      format: "json",
+      options: { num_ctx: NUM_CTX[ctx] },
+    }),
+  });
+  if (!res.ok) throw new Error(`Ollama ${res.status}`);
+  const data = JSON.parse(res.body) as { response?: string };
+  return String(data.response ?? "");
 }
 
 /** Embed a batch of texts via `/api/embed`. Returns one vector per input. */

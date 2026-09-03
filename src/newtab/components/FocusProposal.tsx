@@ -59,7 +59,7 @@ export default function FocusProposal({ open, goal, onClose, onDone }: FocusProp
       const ids = await classifyRelevant(
         goal,
         tabs.map((t) => ({ id: t.id, title: t.title, domain: t.domain })),
-        settings.ollamaModel,
+        settings.aiChatModel,
       );
       setAiKeep(new Set(ids));
       setAiState("idle");

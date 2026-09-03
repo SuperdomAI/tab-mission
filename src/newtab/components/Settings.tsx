@@ -2,6 +2,7 @@ import React, { useState, useTransition } from "react";
 import { useTabStore } from "../../store/tabStore";
 import type { AppSettings } from "../../types/index";
 import { ensureOllamaPermission, detectOllama, listModels } from "../../lib/ollama";
+import { pickMissingModels, recommendedProfile } from "../../lib/ai/models";
 import Switch from "./Switch";
 
 interface SettingsProps {
@@ -40,15 +41,26 @@ export default function Settings({ open, onClose }: SettingsProps) {
       return;
     }
     const models = await listModels();
-    if (models.length > 0 && !models.includes(local.ollamaModel)) {
-      // auto-pick an installed model (e.g. you have "mistral", default was "llama3.2")
-      update("ollamaModel", models[0]);
-      setAiStatus(`Connected — using ${models[0]}`);
-    } else {
+    if (models.length === 0) {
       setAiStatus(
-        `Connected${local.ollamaModel ? ` — using ${local.ollamaModel}` : ""}`,
+        "Connected — no models installed yet. Pull one with `ollama pull` (see hints below).",
       );
+      return;
     }
+    const picked = pickMissingModels(
+      { fast: local.aiFastModel, chat: local.aiChatModel, embed: local.aiEmbedModel },
+      models,
+    );
+    setLocal((prev) => ({
+      ...prev,
+      aiFastModel: picked.fast,
+      aiChatModel: picked.chat,
+      aiEmbedModel: picked.embed,
+      // Legacy alias — AskAI and Focus now read aiChatModel; keep the stored
+      // field coherent for anyone who downgrades the extension.
+      ollamaModel: picked.chat,
+    }));
+    setAiStatus(`Connected — ${picked.chat} handles chat tasks.`);
   }
 
   React.useEffect(() => {
@@ -58,8 +70,11 @@ export default function Settings({ open, onClose }: SettingsProps) {
   function handleSave() {
     startTransition(async () => {
       try {
-        await chrome.storage.sync.set({ settings: local });
-        setSettings(local);
+        // Keep the legacy `ollamaModel` alias aligned with the chat tier.
+        await chrome.storage.sync.set({
+          settings: { ...local, ollamaModel: local.aiChatModel },
+        });
+        setSettings({ ...local, ollamaModel: local.aiChatModel });
         setSaved(true);
         setTimeout(() => setSaved(false), 2000);
       } catch (e) {
@@ -278,21 +293,125 @@ export default function Settings({ open, onClose }: SettingsProps) {
             {aiStatus && <p className="text-xs text-accent mt-1.5">{aiStatus}</p>}
             {local.ollamaEnabled && (
               <>
-                <div className="mt-2">
-                  <input
-                    type="text"
-                    className={inputClass}
-                    value={local.ollamaModel}
-                    onChange={(e) => update("ollamaModel", e.target.value)}
-                    placeholder="model, e.g. llama3.2"
-                  />
+                {/* Per-tier models */}
+                <div className="mt-2 space-y-2.5">
+                  <div>
+                    <label className={labelClass}>Chat Model</label>
+                    <input
+                      type="text"
+                      className={inputClass}
+                      value={local.aiChatModel}
+                      onChange={(e) => update("aiChatModel", e.target.value)}
+                      placeholder="qwen2.5:7b-instruct-q4_K_M"
+                    />
+                    <p className="text-xs text-faint mt-1">
+                      Ask AI, daily debrief, and the weekly coach.
+                    </p>
+                  </div>
+                  <div>
+                    <label className={labelClass}>Fast Model</label>
+                    <input
+                      type="text"
+                      className={inputClass}
+                      value={local.aiFastModel}
+                      onChange={(e) => update("aiFastModel", e.target.value)}
+                      placeholder="qwen2.5:3b-instruct-q4_K_M"
+                    />
+                    <p className="text-xs text-faint mt-1">
+                      Triage and proactive suggestions.
+                    </p>
+                  </div>
+                  <div>
+                    <label className={labelClass}>Embed Model</label>
+                    <input
+                      type="text"
+                      className={inputClass}
+                      value={local.aiEmbedModel}
+                      onChange={(e) => update("aiEmbedModel", e.target.value)}
+                      placeholder="nomic-embed-text"
+                    />
+                    <p className="text-xs text-faint mt-1">
+                      Semantic search over your tabs.
+                    </p>
+                  </div>
                 </div>
-                <p className="text-xs text-faint mt-1.5">
+                <p className="text-xs text-faint mt-2">
+                  Recommended stack (16 GB):
+                  <code className="block mt-1 font-mono bg-surface rounded px-2 py-1 text-muted">
+                    ollama pull {recommendedProfile().chat} && ollama pull{" "}
+                    {recommendedProfile().fast} && ollama pull{" "}
+                    {recommendedProfile().embed}
+                  </code>
+                </p>
+                <p className="text-xs text-faint mt-2">
                   Ollama must allow this extension's origin. Start it with:
                   <code className="block mt-1 font-mono bg-surface rounded px-2 py-1 text-muted">
                     OLLAMA_ORIGINS=chrome-extension://* ollama serve
                   </code>
                 </p>
+
+                {/* Read pages for AI */}
+                <div className="mt-3 flex items-center justify-between">
+                  <div>
+                    <label className={labelClass + " mb-0"}>
+                      Read Pages for AI
+                    </label>
+                    <p className="text-xs text-faint mt-0.5">
+                      Lets AI summarize pages you close and search their content
+                      (optional, off by default).
+                    </p>
+                  </div>
+                  <Switch
+                    checked={local.aiPageReadingEnabled}
+                    onChange={() =>
+                      update(
+                        "aiPageReadingEnabled",
+                        !local.aiPageReadingEnabled,
+                      )
+                    }
+                    label="Read pages for AI"
+                  />
+                </div>
+
+                {/* Per-feature toggles */}
+                <div className="mt-3 pt-3 border-t border-hairline space-y-2.5">
+                  <div className={labelClass + " mb-1"}>Features</div>
+                  <ToggleRow
+                    label="Daily debrief"
+                    checked={local.aiDebrief}
+                    onChange={() => update("aiDebrief", !local.aiDebrief)}
+                  />
+                  <ToggleRow
+                    label="AI triage"
+                    checked={local.aiTriage}
+                    onChange={() => update("aiTriage", !local.aiTriage)}
+                  />
+                  <ToggleRow
+                    label="Proactive suggestions"
+                    checked={local.aiSuggestions}
+                    onChange={() => update("aiSuggestions", !local.aiSuggestions)}
+                  />
+                  <ToggleRow
+                    label="Session memory"
+                    checked={local.aiSessionMemory}
+                    onChange={() => update("aiSessionMemory", !local.aiSessionMemory)}
+                  />
+                  <ToggleRow
+                    label="Semantic search"
+                    checked={local.aiSemanticSearch}
+                    onChange={() => update("aiSemanticSearch", !local.aiSemanticSearch)}
+                  />
+                  <ToggleRow
+                    label="Habits coach"
+                    checked={local.aiCoach}
+                    onChange={() => update("aiCoach", !local.aiCoach)}
+                  />
+                  <ToggleRow
+                    label="Idle-time drafts"
+                    checked={local.aiIdleDrafts}
+                    onChange={() => update("aiIdleDrafts", !local.aiIdleDrafts)}
+                  />
+                </div>
               </>
             )}
           </div>
@@ -310,5 +429,22 @@ export default function Settings({ open, onClose }: SettingsProps) {
         </div>
       </aside>
     </>
+  );
+}
+
+function ToggleRow({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: () => void;
+}) {
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-sm text-muted">{label}</span>
+      <Switch checked={checked} onChange={onChange} label={label} />
+    </div>
   );
 }

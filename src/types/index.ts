@@ -67,9 +67,22 @@ export interface AppSettings {
  * Merge stored settings over the defaults so settings added in later releases
  * (e.g. the AI fields) are never `undefined` for users with older saved
  * settings in `chrome.storage.sync`. `stored` is a full-or-partial object.
+ *
+ * One-time legacy migration: AskAI and Focus "Refine with AI" used to read
+ * `ollamaModel`; the chat tier (`aiChatModel`) now owns that role. When a user
+ * had chosen a legacy model and never touched the new field, carry it over
+ * once so their model keeps working.
  */
 export function mergeSettings(stored: Partial<AppSettings> | undefined): AppSettings {
-  return { ...DEFAULT_SETTINGS, ...stored };
+  const merged = { ...DEFAULT_SETTINGS, ...stored };
+  if (
+    stored?.ollamaModel !== undefined &&
+    stored.ollamaModel !== DEFAULT_SETTINGS.ollamaModel &&
+    merged.aiChatModel === DEFAULT_SETTINGS.aiChatModel
+  ) {
+    merged.aiChatModel = stored.ollamaModel;
+  }
+  return merged;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {

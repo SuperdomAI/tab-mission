@@ -5,6 +5,7 @@ import {
   last7Days,
   topDomains,
 } from "../../store/analyticsStore";
+import CoachCard from "./CoachCard";
 
 interface WeeklyReportProps {
   open: boolean;
@@ -104,6 +105,9 @@ export default function WeeklyReport({ open, onClose }: WeeklyReportProps) {
         </div>
 
         <div className="flex-1 overflow-y-auto p-5 space-y-6">
+          {/* Coach (F11) — hidden when AI is off */}
+          <CoachCard open={open} />
+
           {/* Weekly totals */}
           <section>
             <h3 className="label-mono mb-3">7-Day Totals</h3>

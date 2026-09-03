@@ -111,3 +111,26 @@ export function isRecommendedModel(model: string): boolean {
   const all = new Set(allModelsFor("fast").concat(allModelsFor("chat"), allModelsFor("embed")));
   return all.has(model);
 }
+
+/**
+ * Fill any tier whose current model is not installed with the best resolution
+ * for that tier; installed choices are kept as-is. Used by the Settings
+ * auto-pick when the user connects Ollama.
+ */
+export function pickMissingModels(
+  current: ModelProfile,
+  installed: string[],
+): ModelProfile {
+  if (installed.length === 0) return current;
+  return {
+    fast: installed.includes(current.fast)
+      ? current.fast
+      : resolveModel("fast", installed),
+    chat: installed.includes(current.chat)
+      ? current.chat
+      : resolveModel("chat", installed),
+    embed: installed.includes(current.embed)
+      ? current.embed
+      : resolveEmbedModel(installed),
+  };
+}
