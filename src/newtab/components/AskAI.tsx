@@ -70,6 +70,14 @@ const SUGGESTIONS = [
   "Any tabs I can hibernate to save memory?",
   "Group my open work into projects",
   "What are you able to help with?",
+  "Mute the tab that's playing audio",
+  "Close every tab except the one I'm using",
+  "Duplicate a tab I mention",
+  "Reopen the last tab I closed",
+  "Copy the links of my open tabs",
+  "Save all my open tabs as a session",
+  "Tell me what's on one of my tabs",
+  "Jump straight to a tab I have open",
 ];
 
 const MAX_TOOL_TURNS = 2;
@@ -761,7 +769,7 @@ const system = useCallback(
               role="menu"
               aria-label="Suggested questions"
               style={suggestPopoverStyle(suggestBtnRef.current.getBoundingClientRect())}
-              className="animate-fade-in bg-popover border border-hairline rounded-[14px] shadow-[0_40px_100px_-30px_#000] p-2 w-[280px]"
+              className="animate-fade-in bg-popover border border-hairline rounded-[14px] shadow-[0_40px_100px_-30px_#000] p-2 w-[280px] max-h-[60vh] overflow-y-auto"
             >
               <p className="label-mono px-2.5 pt-1.5 pb-1">Try asking</p>
               {SUGGESTIONS.map((s) => (
