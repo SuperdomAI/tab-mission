@@ -110,6 +110,8 @@ interface AppSettings {
   aiChatModel: string; // summaries/reports tier — default qwen3:8b
   aiEmbedModel: string; // semantic search tier — default nomic-embed-text
   aiPageReadingEnabled: boolean; // default false — gates F6/F7 page reading (optional perms)
+  aiClipboardEnabled: boolean; // default false — gates the Ask AI copyTabUrls tool (optional clipboardWrite perm)
+  aiReopenEnabled: boolean; // default false — gates the Ask AI reopenClosedTab tool (optional sessions perm)
   aiDebrief: boolean; // default true (all per-feature toggles default ON with the master)
   aiTriage: boolean;
   aiSuggestions: boolean;
@@ -265,7 +267,7 @@ Store updates that flow from `chrome.storage.onChanged` are wrapped in `startTra
 | `DebriefCard`       | `open`             | `analytics, settings` + `useAIReports` | `storage.local` write (`aiReports`), Ollama via `bgFetch` |
 | `WeeklyReport`      | `open, onClose`    | `analytics`                 | —                                                              |
 | `CoachCard`         | `open`             | `analytics, settings` + `useAIReports` | `storage.local` write (`aiReports`), Ollama via `bgFetch` |
-| `Settings`          | `open, onClose`    | `settings`                  | `storage.sync.set`; `permissions.request/remove` (page-reading grants on the "Read Pages for AI" toggle) |
+| `Settings`          | `open, onClose`    | `settings`                  | `storage.sync.set`; `permissions.request/remove` (page-reading on "Read Pages for AI", `sessions` on "Reopen Closed Tabs for AI", `clipboardWrite` on "Copy Tab Links for AI" — all F6-style, requested only at the explicit opt-in) |
 | `TimelineView`      | `onSummarizeClose` | `tabs, settings` + `useTriagePlan` | `saveAndClose` via `useTabActions` (Clear forgotten, AI triage approve) |
 | `TriageProposal`    | `open, onClose`    | `tabs, settings` + `useTriagePlan` | `storage.local` write (`aiTriagePlan`, `aiIdleDraftDismissedAt`), Ollama via `bgFetch`, `saveAndClose` |
 | `StacksView`        | `onFocus, onSummarizeClose` | `tabs`                  | —                                                              |
@@ -273,7 +275,7 @@ Store updates that flow from `chrome.storage.onChanged` are wrapped in `startTra
 | `TabRow`            | `tab, onJump, onClose, onSummarizeClose?` | `settings`   | — (summarize-close goes through `useReadingList`)              |
 | `SuggestionsStrip`  | `onFocus`          | `tabs, settings` + `useSuggestions` | `storage.local` write (`aiSuggestions`), Ollama via `bgFetch` |
 | `CommandPalette`    | `onFocus, onOpenWorkspaces, onAskAI` | `tabs, settings, sessions` + `useSessionSummaries` + `useTabEmbeddings` | `windows.create` (session restore), `tabs.update`, `windows.update`, `tabs.remove`, `tabs.discard`; `storage.local` write (`aiTabEmbeddings`), Ollama via `bgFetch` (embeddings) |
-| `AskAI` (sidebar)   | `open, onClose, onOpenSettings, onClosed` | `tabs, settings` + `useTabActions` | Ollama via the `ollama-stream` port (`streamChat`); 9 validated tools (`closeTab`, `hibernateTab`, `openTab`, `jumpTab`, `groupTabs`, `saveSession`, `pinTab`, `unpinTab`, `readPage`) — `tabs.remove`/`discard`/`update`/`group`/`create`/`executeScript` ONLY through them (`resolveCloseTarget`/`resolveOpenUrl`/`resolveGroupTarget`; pinned/unknown tabs never touched; `readPage` gates on the F6 page-reading grant); "New chat" aborts + clears the thread; auto-compaction drops oldest turns past a 3000-token budget (`compactMessages`); reopen on Undo via `tabs.create` (App toast) |
+| `AskAI` (sidebar)   | `open, onClose, onOpenSettings, onClosed` | `tabs, settings` + `useTabActions` | Ollama via the `ollama-stream` port (`streamChat`); 15 validated tools (`closeTab`, `hibernateTab`, `openTab`, `jumpTab`, `groupTabs`, `saveSession`, `pinTab`, `unpinTab`, `readPage`, `muteTab`, `unmuteTab`, `closeOtherTabs`, `duplicateTab`, `reopenClosedTab`, `copyTabUrls`) — `tabs.remove`/`discard`/`update`/`group`/`create`/`duplicate`, `sessions.restore`, `navigator.clipboard.writeText` ONLY through them (`resolveCloseTarget`/`resolveOpenUrl`/`resolveGroupTarget`/`resolveTabTarget`/`resolveCloseOthersTarget`/`resolveReopenTarget`/`resolveCopyTitles`; pinned/unknown tabs never closed or hibernated, but MAY be muted/duplicated/copied — non-destructive; `readPage` gates on the F6 page-reading grant, `reopenClosedTab` on the optional `sessions` grant (Settings "Reopen Closed Tabs for AI", restores TAB-level closes only), `copyTabUrls` on the optional `clipboardWrite` grant (Settings "Copy Tab Links for AI")); "New chat" aborts + clears the thread; auto-compaction drops oldest turns past a 3000-token budget (`compactMessages`); reopen on Undo via `tabs.create` (App toast) |
 | `Tooltip`            | `text, position?, align?` | —                    | —                                                              |
 
 ---
@@ -445,4 +447,4 @@ Implemented in `BulkActions.tsx`. Button counts and the zombie threshold both re
 - **`unvisitedAutoCloseEnabled`** — setting exists, background auto-close wiring not yet implemented
 - **WindowGroup view** — alternative grouping by window (not domain) not yet built
 - **Tab tagging** — `EnrichedTab.tags` renders as chips but has no add/edit UI
-- **Ask AI chat** — conversation history is in-memory (lost when the new-tab page reloads; "New chat" clears it, auto-compaction trims past 3000 tokens), the tool set is the 9 validated tools (a web-search tool would break the no-network privacy model); token-level streaming works through the SW port, but there is no AI-Elements-style part rendering yet
+- **Ask AI chat** — conversation history is in-memory (lost when the new-tab page reloads; "New chat" clears it, auto-compaction trims past 3000 tokens), the tool set is the 15 validated tools (a web-search tool would break the no-network privacy model); token-level streaming works through the SW port, but there is no AI-Elements-style part rendering yet
