@@ -16,6 +16,7 @@ import {
   triageCandidates,
 } from "../lib/ai/triage";
 import { summarizeSession } from "../lib/ai/sessionMemory";
+import { findDuplicateSession } from "../lib/sessionDedup";
 
 // ─── Ollama CORS: strip the Origin header for localhost:11434 ────────────────
 // Chrome attaches `Origin: chrome-extension://<id>` to extension requests, and
@@ -381,6 +382,16 @@ chrome.windows.onRemoved.addListener((windowId) =>
         sessions?: SavedSession[];
       };
       const sessions: SavedSession[] = result.sessions ?? [];
+      // Restore-then-autosave dedup: a window opened by `restoreSession` is
+      // re-created from a session snapshot, so closing it later would auto-
+      // save a near-identical session. Skip when the exact tab-set exists.
+      const dup = findDuplicateSession(sessions, { tabs: windowTabs });
+      if (dup) {
+        console.log(
+          `[TMC] auto-save skipped — duplicate of session ${dup.id}`,
+        );
+        return;
+      }
       const newSession: SavedSession = {
         id: `auto-${Date.now()}`,
         name: `Auto-save: ${new Date().toLocaleString()}`,
