@@ -3,14 +3,17 @@ import { useTabStore, useShallow, selectTabsByDomain, selectDomainsSorted } from
 import Deck from "./Deck";
 import DeckPopover from "./DeckPopover";
 import SuggestionsStrip from "./SuggestionsStrip";
+import type { EnrichedTab } from "../../types/index";
 
 interface StacksViewProps {
   /** Open FocusProposal pre-filled with a goal (F3 suggestion chips). */
   onFocus: (goal: string) => void;
+  /** F6 — summarize-then-close, wired from App. */
+  onSummarizeClose: (tab: EnrichedTab) => void;
 }
 
 /** Default view: every site as a Wallet-style deck; click → popover. */
-export default function StacksView({ onFocus }: StacksViewProps) {
+export default function StacksView({ onFocus, onSummarizeClose }: StacksViewProps) {
   const tabs = useTabStore((s) => s.tabs);
   const [openDomain, setOpenDomain] = useState<string | null>(null);
 
@@ -45,6 +48,7 @@ export default function StacksView({ onFocus }: StacksViewProps) {
         tabs={openTabs}
         open={openDomain !== null && openTabs.length > 0}
         onClose={() => setOpenDomain(null)}
+        onSummarizeClose={onSummarizeClose}
       />
     </>
   );

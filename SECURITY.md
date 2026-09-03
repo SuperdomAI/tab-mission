@@ -19,6 +19,7 @@ This extension is designed around a strict local-first privacy model:
 
 - **No backend, no telemetry.** All tab, session, and analytics data lives in `chrome.storage.local` / `chrome.storage.sync` on the user's machine. There are no analytics SDKs and no external network calls by default.
 - **Optional local AI only.** The sole outbound-capable feature is the Ollama integration (`localhost:11434` / `127.0.0.1:11434`). It is off by default, requires optional host permissions that the user grants at opt-in, is restricted by the manifest CSP, and can be revoked at any time.
+- **Optional page reading (F6).** "Summarize & close" reads the visible text of the page the user explicitly clicks it on, via the optional `scripting` permission + `<all_urls>`-style host grants — requested only at the "Read Pages for AI" opt-in, revoked on opt-out or in chrome://extensions. Page content goes only to the user's local Ollama; the summary lives in `chrome.storage.local`. Every other feature works without these grants.
 - **Minimal permissions.** The manifest requests only what the features need (`tabs`, `windows`, `storage`, `idle`, `alarms`, `tabGroups`, `favicon`, `declarativeNetRequestWithHostAccess`). Contributions that add permissions or network calls require strong justification (see CONTRIBUTING.md).
 - **One-way data flow.** The background service worker is the only writer of tab data; the UI is a read-only mirror of `chrome.storage`.
 

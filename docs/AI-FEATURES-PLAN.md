@@ -1,6 +1,6 @@
 # AI Features Implementation Plan (v1.3.0 — "Tab Mission Intelligence")
 
-Scope: features 1, 2, 3, 4, 6, 7, 11, 12 from the AI brainstorm. All run on a **local Ollama** instance; nothing leaves the machine. Status: **stages A–E landed** (PR A: shared infra + settings fields; PR B: F1 daily debrief + F11 habits coach + settings model tiers; PR C: F2 AI triage overlay + F12 idle drafts; PR D: F3 proactive suggestions + F4 session memory; PR E: F7 semantic ⌘K search). Remaining: F6 (PR F).
+Scope: features 1, 2, 3, 4, 6, 7, 11, 12 from the AI brainstorm. All run on a **local Ollama** instance; nothing leaves the machine. Status: **all stages landed — v1.3.0 feature set complete** (PR A: shared infra + settings fields; PR B: F1 daily debrief + F11 habits coach + settings model tiers; PR C: F2 AI triage overlay + F12 idle drafts; PR D: F3 proactive suggestions + F4 session memory; PR E: F7 semantic ⌘K search; PR F: F6 summarize-then-close + optional page-reading grants + version 1.3.0).
 
 ---
 
@@ -40,7 +40,7 @@ Storage additions (all `chrome.storage.local`, all regenerable):
 | `aiTriagePlan` | UI + SW (idle drafts) | `{ signature, items: { tabId, reason, action }[], generatedAt, source: "on-demand" \| "idle" }` |
 | `aiSessionSummaries` | UI + SW | `{ [sessionId]: { summary, generatedAt, model } }` |
 | `aiSuggestions` | UI | `{ signature, items: { goal, tabIds, reason }[], dismissed: boolean }` |
-| `aiReadingList` | UI | `{ id, url, title, summary, savedAt }[]` (cap 100) |
+| `aiReadingList` | UI | `{ id, url, title, summary, savedAt }[]` — landed in PR F; cap 100, content-addressed ids, 7-day reuse TTL |
 | `aiTabEmbeddings` | UI | `{ model, dims, vectors: { [tabId]: { title, vector, embeddedAt } } }` — landed in PR E; keyed by `{model, tabId, title}`, TTL 24 h, re-embedded on model change |
 
 Settings additions (`AppSettings`, `chrome.storage.sync`): a single **AI Assist** master toggle (reuses `ollamaEnabled`) plus:
@@ -103,15 +103,15 @@ Total resident with KV cache ≈ 6-7 GB — comfortable on 16 GB alongside Chrom
 - **Storage:** `SavedSession` gains optional `summary?: string` (in-session cache, backfilled; the authoritative `aiSessionSummaries` map stays separate to avoid touching SW's session writes).
 - **Tests:** summary prompt, cache/coercion, summarizeSession orchestration (gating, map write, backfill), fallback path.
 
-### F6 — Summarize-then-close (needs new optional permissions — the only one)
-- **Permissions:** add `"scripting"` to `optional_permissions`; request `<all_urls>`-style host grants (`http://*/*`, `https://*/*`) **at first use** via `chrome.permissions.request`, behind `aiPageReadingEnabled` in Settings ("Allow reading pages for AI"). Revocable. Store-review note in §6.
+### F6 — Summarize-then-close — landed in PR F (needs new optional permissions — the only one)
+- **Permissions:** `"scripting"` added to `optional_permissions`; `<all_urls>`-style host grants (`http://*/*`, `https://*/*`) in `optional_host_permissions` — requested **at the "Read Pages for AI" opt-in** via `chrome.permissions.request` (`src/lib/pageReading.ts`), revoked programmatically on opt-out. Revocable in `chrome://extensions`. Store-review note in §6.
 - **Mechanics:**
-  1. `chrome.scripting.executeScript` → inline function returning `{ title, metaDescription, text }` (visible text, truncate ~6k chars).
-  2. `bgFetch("/api/generate")` — chat model, "3-5 bullet summary, ≤ 120 words, keep the why-it-mattered." JSON.
-  3. Persist to `aiReadingList` **before** closing (order guaranteed, same as `saveAndClose`).
+  1. `chrome.scripting.executeScript` → `extractPageText` (`src/lib/pageExtract.ts`) returning `{ title, metaDescription, text }` (visible text, truncated ~6k chars at a word boundary).
+  2. `generate()` — chat model, "3-5 bullet summary, ≤ 120 words, keep the why-it-mattered." JSON.
+  3. Persist to `aiReadingList` **before** closing (order guaranteed, same as `saveAndClose`); entries content-addressed by `sha1("summarizePage\n" + pageSignature)` so the same page re-closed within the 7-day `summarizePage` TTL reuses the summary, deduped, capped at 100.
   4. Close the tab via `useTabActions.close`; undo toast reuses the pattern (reopen + remove entry).
-- **UI:** "Summarize & close" action on `TabRow` / `DeckPopover` rows (small ghost button, hover-revealed — design system: metadata recedes); "Reading list" section in the Sessions drawer (or own drawer if it outgrows).
-- **Tests:** content truncation, prompt, parse, list cap, close-order guarantee.
+- **UI:** hover-revealed book button on `TabRow` (deck popover + Timeline — design system: metadata recedes); "Reading list" section in the Sessions drawer (newest first, per-entry remove).
+- **Tests:** content truncation, prompt, parse, list cap, close-order guarantee (persist-before-close), permission request/revoke, button gating.
 
 ### F7 — Semantic ⌘K search — landed in PR E
 - **Inputs:** tab title + domain (+ summary/content if F6 content available). Embed model.
@@ -136,11 +136,11 @@ Total resident with KV cache ≈ 6-7 GB — comfortable on 16 GB alongside Chrom
 ## 4. Manifest & settings changes (summary)
 
 ```jsonc
-// manifest.json — additive, optional-only
+// manifest.json — additive, optional-only (landed in PR F)
 "optional_permissions": ["scripting"],
 "optional_host_permissions": [ "http://localhost/*", "http://127.0.0.1/*", "http://*/*", "https://*/*" ]
 ```
-CSP unchanged. `tabs` permission already grants title/url for F1-F4/F7-title embeddings — page *reading* is the only new capability, and it's optional + on-demand.
+CSP unchanged. `tabs` permission already grants title/url for F1-F4/F7-title embeddings — page *reading* is the only new capability, and it's optional + on-demand ("Read Pages for AI" toggle requests + revokes the grants; justification in `docs/STORE-LISTING.md` §5).
 
 Settings drawer: extend the Local AI section — model fields per tier, "Read pages for AI" toggle, per-feature toggles, `ollama pull` hints for the recommended stack.
 
@@ -155,9 +155,9 @@ Settings drawer: extend the Local AI section — model fields per tier, "Read pa
 | ✅ **C** | F2 triage overlay + F12 idle drafts (session-first close path) | low |
 | ✅ **D** | F3 suggestions + F4 session memory (additive storage, SW hook) | low |
 | ✅ **E** | F7 semantic ⌘K search (fallback preserved) | low |
-| **F** | F6 summarize-then-close (optional permissions, store-review note) | medium (perms) |
+| ✅ **F** | F6 summarize-then-close (optional permissions, store-review note) | medium (perms) |
 
-Every PR: `npm run typecheck` + `npm run test:run` + `npm run build`, new tests alongside, CHANGELOG entry, `docs/ARCHITECTURE.md` storage-schema section update. Version bumps at the end of each stage (next: 1.3.0).
+Every PR: `npm run typecheck` + `npm run test:run` + `npm run build`, new tests alongside, CHANGELOG entry, `docs/ARCHITECTURE.md` storage-schema section update. Version bumped to 1.3.0 at the end of stage F (feature set complete).
 
 ---
 
@@ -169,5 +169,5 @@ Every PR: `npm run typecheck` + `npm run test:run` + `npm run build`, new tests 
 - **JSON reliability:** always `format: "json"` + tested fallback parsing (`parse.ts`), never trust raw output.
 - **Storage quota:** `chrome.storage.local` ~10 MB — embeddings for 100 tabs ≈ 300 KB, reports/summaries are KBs. Cap `aiReadingList` at 100. No `unlimitedStorage` permission.
 - **Embedding-model drift:** key `aiTabEmbeddings` by model name; re-embed when it changes.
-- **Store review:** F6's optional `<all_urls>` grant must be justified in the listing ("optional, off by default, only reads the page you click Summarize on, revocable"). SECURITY.md + README updated in PR F.
+- **Store review:** F6's optional `<all_urls>` grant is justified in the listing ("optional, off by default, only reads the page you click Summarize on, revocable") — see `docs/STORE-LISTING.md` §5. SECURITY.md + README updated in PR F.
 - **Design system:** all new surfaces follow DESIGN.md — mono labels, muted body text, no emoji, no decorative color, real depth on overlays. AI status is never a colored badge unless it's a status.

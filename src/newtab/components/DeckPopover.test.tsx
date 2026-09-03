@@ -1,8 +1,9 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import DeckPopover from "./DeckPopover";
 import { useTabStore } from "../../store/tabStore";
 import { makeTab } from "../../test/factory";
+import { DEFAULT_SETTINGS } from "../../types/index";
 
 function chromeMock() {
   return (globalThis as unknown as { chrome: typeof chrome }).chrome;
@@ -47,5 +48,55 @@ describe("DeckPopover", () => {
     // only 1 non-pinned tab is closeable
     fireEvent.click(screen.getByRole("button", { name: /close 1 tab/i }));
     expect(chromeMock().tabs.remove).toHaveBeenCalledWith([1]);
+  });
+});
+
+// ─── F6 "Summarize & close" (ADDED — existing tests above untouched) ────────
+
+describe("DeckPopover summarize & close (F6)", () => {
+  beforeEach(() => {
+    useTabStore.setState({
+      tabs: [],
+      settings: { ...DEFAULT_SETTINGS, ollamaEnabled: true, aiPageReadingEnabled: true },
+    });
+  });
+
+  it("hides the button when no onSummarizeClose is wired (AI off surface)", () => {
+    const tabs = [makeTab({ id: 1, title: "Article", domain: "news.com" })];
+    useTabStore.setState({ tabs });
+    render(<DeckPopover domain="news.com" tabs={tabs} open={true} onClose={() => {}} />);
+    expect(screen.queryByRole("button", { name: /summarize and close/i })).toBeNull();
+  });
+
+  it("shows the button when wired and AI is on; click calls it with the tab", () => {
+    const tabs = [makeTab({ id: 1, title: "Article", domain: "news.com" })];
+    useTabStore.setState({ tabs });
+    const onSummarizeClose = vi.fn();
+    render(
+      <DeckPopover
+        domain="news.com"
+        tabs={tabs}
+        open={true}
+        onClose={() => {}}
+        onSummarizeClose={onSummarizeClose}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /summarize and close article/i }));
+    expect(onSummarizeClose).toHaveBeenCalledWith(tabs[0]);
+  });
+
+  it("hides the button for pinned tabs (never summarized)", () => {
+    const tabs = [makeTab({ id: 1, title: "Article", isPinned: true })];
+    useTabStore.setState({ tabs });
+    render(
+      <DeckPopover
+        domain="news.com"
+        tabs={tabs}
+        open={true}
+        onClose={() => {}}
+        onSummarizeClose={vi.fn()}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: /summarize and close/i })).toBeNull();
   });
 });

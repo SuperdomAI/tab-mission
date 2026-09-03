@@ -10,10 +10,12 @@ interface DeckPopoverProps {
   tabs: EnrichedTab[];
   open: boolean;
   onClose: () => void;
+  /** F6 — summarize-then-close, wired from App through StacksView. */
+  onSummarizeClose?: (tab: EnrichedTab) => void;
 }
 
 /** Click a deck → this popover lists the site's tabs with per-tab + bulk close. */
-export default function DeckPopover({ domain, tabs, open, onClose }: DeckPopoverProps) {
+export default function DeckPopover({ domain, tabs, open, onClose, onSummarizeClose }: DeckPopoverProps) {
   const { close, closeMany, hibernateMany, jumpTo } = useTabActions();
   const [saved, setSaved] = useState(false);
 
@@ -52,7 +54,13 @@ export default function DeckPopover({ domain, tabs, open, onClose }: DeckPopover
         {/* tab list */}
         <div className="max-h-[50vh] overflow-y-auto">
           {tabs.map((tab) => (
-            <TabRow key={tab.id} tab={tab} onJump={jumpTo} onClose={close} />
+            <TabRow
+              key={tab.id}
+              tab={tab}
+              onJump={jumpTo}
+              onClose={close}
+              onSummarizeClose={onSummarizeClose}
+            />
           ))}
         </div>
 

@@ -2,7 +2,7 @@
 
 All notable changes to Tab Mission are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.3.0] - 2026-09-03
 
 ### Added
 
@@ -23,6 +23,9 @@ All notable changes to Tab Mission are documented here. Format follows [Keep a C
 - **Suggestions + session-memory modules** — `src/lib/ai/suggestions.ts` (strict parser, storage coercion, freshness with the ≥ 5-tab regen rule, fast-tier `generateSuggestions`) and `src/lib/ai/sessionMemory.ts` (summary parser, map coercion with 30-day prune, chat-tier `generateSessionSummary`, shared `summarizeSession` orchestrator for UI + service worker — the `aiTriagePlan` dual-owner precedent).
 - **Semantic ⌘K search (F7)** — tab search now understands meaning, not just strings: while the palette is open, open tabs are lazily embedded (title + domain, one batch call, cached per `{model, tabId, title}` under `aiTabEmbeddings` in `chrome.storage.local`, TTL 24 h, re-embedded on model change or title change, pruned for closed tabs); the query is embedded after a 250 ms debounce and scored against the tab vectors (cosine ≥ 0.32). Semantic hits rank first, Fuse fills the rest (deduped), and only embedding-matched rows carry a subtle accent dot (`Semantic match`). Off (AI master or `aiSemanticSearch` toggle) → pure Fuse, exactly today's behavior. Embedding failures degrade silently — semantic search never blocks the palette.
 - **Embeddings module** — `src/lib/ai/tabEmbeddings.ts` (storage coercion + dims consistency, immutable `TabEmbeddingCache` with freshness/`vectorsFor`/`prune`, `ensureTabEmbeddings` batch re-embed orchestrator, `searchSemanticTabs` top-k scorer) and the semantic-first merge `searchTabsSemantic` in `src/lib/commandFilter.ts` (flags which rows matched semantically for the accent dot).
+- **Summarize & close (F6)** — a hover-revealed book button on every tab row (deck popover + Timeline): the page's visible text is extracted via `chrome.scripting.executeScript`, summarized by the local chat model ("3-5 bullets, ≤ 120 words, why it mattered"), persisted to the `aiReadingList` reading list in `chrome.storage.local` (capped at 100, content-addressed by `sha1(summarizePage + page signature)` so closing the same page again within 7 days reuses the stored summary — no second model call), and only THEN the tab is closed (order guaranteed). A bottom toast offers Undo — reopening the tab and dropping the entry. Restricted pages (chrome://, revoked grants, Ollama down) fail silently; nothing closes. The reading list lives in the Sessions drawer.
+- **Page-reading grants** — "Read Pages for AI" in Settings now actually requests the optional `scripting` permission + `<all_urls>`-style host access at that explicit opt-in moment (`http://*/*`, `https://*/*` in `optional_permissions` / `optional_host_permissions` — the ONLY optional perms in the extension), and revokes them programmatically when toggled off. Revocable anytime in chrome://extensions. All other features work without these grants.
+- **Version 1.3.0** — the v1.3.0 AI feature set is complete: F1 debrief, F2 triage, F3 suggestions, F4 session memory, F6 summarize-close, F7 semantic search, F11 coach, F12 idle drafts — all optional, all local.
 
 ### Fixed
 

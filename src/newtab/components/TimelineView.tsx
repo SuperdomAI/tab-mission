@@ -6,9 +6,15 @@ import { useTabActions } from "../hooks/useTabActions";
 import { useTriagePlan } from "../hooks/useTriagePlan";
 import TabRow from "./TabRow";
 import TriageProposal from "./TriageProposal";
+import type { EnrichedTab } from "../../types/index";
+
+interface TimelineViewProps {
+  /** F6 — summarize-then-close, wired from App. */
+  onSummarizeClose: (tab: EnrichedTab) => void;
+}
 
 /** Second view: tabs by attention over time, with safe "clear forgotten". */
-export default function TimelineView() {
+export default function TimelineView({ onSummarizeClose }: TimelineViewProps) {
   const tabs = useTabStore((s) => s.tabs);
   const settings = useTabStore((s) => s.settings);
   const { close, jumpTo, saveAndClose } = useTabActions();
@@ -59,7 +65,13 @@ export default function TimelineView() {
             }`}
           >
             {b.tabs.map((tab) => (
-              <TabRow key={tab.id} tab={tab} onJump={jumpTo} onClose={close} />
+              <TabRow
+                key={tab.id}
+                tab={tab}
+                onJump={jumpTo}
+                onClose={close}
+                onSummarizeClose={onSummarizeClose}
+              />
             ))}
           </div>
         </section>

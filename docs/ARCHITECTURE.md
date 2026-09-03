@@ -258,15 +258,17 @@ Store updates that flow from `chrome.storage.onChanged` are wrapped in `startTra
 | `DomainGroup`        | `domain, tabs`     | —                           | `tabs.remove` (close all in group)                            |
 | `SearchBar`          | `inputRef?`        | `tabs`                      | `tabs.update`, `windows.update`                                |
 | `BulkActions`        | —                  | `tabs, settings`            | `tabs.remove`, `tabs.discard`                                  |
-| `SessionManager`     | `open, onClose`    | `sessions` (useSession), `useSessionSummaries` | `windows.create`, `storage.local.set/get`      |
+| `SessionManager`     | `open, onClose`    | `sessions` (useSession), `useSessionSummaries`, `useReadingList` | `windows.create`, `storage.local.set/get`      |
 | `AnalyticsDashboard` | `open, onClose`    | `analytics, tabs`           | —                                                              |
 | `DebriefCard`       | `open`             | `analytics, settings` + `useAIReports` | `storage.local` write (`aiReports`), Ollama via `bgFetch` |
 | `WeeklyReport`      | `open, onClose`    | `analytics`                 | —                                                              |
 | `CoachCard`         | `open`             | `analytics, settings` + `useAIReports` | `storage.local` write (`aiReports`), Ollama via `bgFetch` |
-| `Settings`          | `open, onClose`    | `settings`                  | `storage.sync.set`                                             |
-| `TimelineView`      | —                  | `tabs, settings` + `useTriagePlan` | `saveAndClose` via `useTabActions` (Clear forgotten, AI triage approve) |
+| `Settings`          | `open, onClose`    | `settings`                  | `storage.sync.set`; `permissions.request/remove` (page-reading grants on the "Read Pages for AI" toggle) |
+| `TimelineView`      | `onSummarizeClose` | `tabs, settings` + `useTriagePlan` | `saveAndClose` via `useTabActions` (Clear forgotten, AI triage approve) |
 | `TriageProposal`    | `open, onClose`    | `tabs, settings` + `useTriagePlan` | `storage.local` write (`aiTriagePlan`, `aiIdleDraftDismissedAt`), Ollama via `bgFetch`, `saveAndClose` |
-| `StacksView`        | `onFocus`          | `tabs`                      | —                                                              |
+| `StacksView`        | `onFocus, onSummarizeClose` | `tabs`                  | —                                                              |
+| `DeckPopover`       | `open, onClose, onSummarizeClose?` | —                    | `tabs.remove`, `tabs.discard`, `storage.local.set` (sessions)  |
+| `TabRow`            | `tab, onJump, onClose, onSummarizeClose?` | `settings`   | — (summarize-close goes through `useReadingList`)              |
 | `SuggestionsStrip`  | `onFocus`          | `tabs, settings` + `useSuggestions` | `storage.local` write (`aiSuggestions`), Ollama via `bgFetch` |
 | `CommandPalette`    | `onFocus, onOpenWorkspaces, onAskAI` | `tabs, settings, sessions` + `useSessionSummaries` + `useTabEmbeddings` | `windows.create` (session restore), `tabs.update`, `windows.update`, `tabs.remove`, `tabs.discard`; `storage.local` write (`aiTabEmbeddings`), Ollama via `bgFetch` (embeddings) |
 | `Tooltip`            | `text, position?, align?` | —                    | —                                                              |
@@ -287,6 +289,7 @@ Store updates that flow from `chrome.storage.onChanged` are wrapped in `startTra
 | `aiSuggestions` | `local` | `Suggestions` (see below) | Single plan, TTL 30 min, regen on ≥ 5-tab change |
 | `aiSessionSummaries` | `local` | `SessionSummariesMap` (see below) | Entries pruned after 30 days |
 | `aiTabEmbeddings` | `local` | `TabEmbeddings` (see below) | Per-tab vectors, TTL 24 h, re-embedded on model/title change |
+| `aiReadingList` | `local` | `ReadingEntry[]` (see below) | Capped at 100, entries reused ≤ 7 days |
 
 ### `aiReports` (UI-owned, landed in PR B)
 
@@ -351,11 +354,18 @@ aiTabEmbeddings: {
 }
 ```
 
-### AI cache keys (planned — stage F of `docs/AI-FEATURES-PLAN.md`)
+### `aiReadingList` (UI-owned, landed in PR F)
 
-| Key | Contents |
-| --- | --- |
-| `aiReadingList` | capped at 100 entries (F6) |
+F6 summarize-then-close. A capped list of page summaries written ONLY by the React layer (`useReadingList` in `src/newtab/hooks/useReadingList.ts` — the same UI-owned precedent as `aiSuggestions`; the service worker never touches it). Each entry's `id` is content-addressed — `sha1("summarizePage\n" + pageSignature(title, text))`, the same formula as `AiCache.key` — so closing the same page again within the `summarizePage` task TTL (7 days) reuses the stored summary without a second model call, and a re-summarized page never duplicates a row (`ReadingList.add` replaces in place, then caps at 100, oldest dropped). The pipeline is order-guaranteed like `saveAndClose`: extract the page text via `chrome.scripting.executeScript` (`extractPageText` in `src/lib/pageExtract.ts`, text truncated to `PAGE_TEXT_CAP`), summarize with the chat tier (`generatePageSummary`), PERSIST the entry, THEN close the tab (`useTabActions.close`). Undo (bottom toast, App-owned) reopens the tab and removes the entry. Restricted pages / revoked grants / Ollama down → null, nothing closes. The reading list renders in the Sessions drawer (newest first) with per-entry remove. The `scripting` + `<all_urls>` grants are requested at the explicit "Read Pages for AI" opt-in (`src/lib/pageReading.ts`) and revoked on opt-out — the ONLY optional permissions in the extension.
+
+```
+aiReadingList: [
+  { id,                                    // sha1("summarizePage\n" + pageSignature)
+    url, title,
+    summary,                               // bullets + why-it-mattered line
+    savedAt }                              // summarizePage TTL 7 d (reuse window)
+]                                          // cap 100, newest last
+```
 
 ---
 

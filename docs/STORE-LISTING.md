@@ -70,6 +70,8 @@ favicon — Show reliable site icons via Chrome's built-in _favicon API. The fav
 declarativeNetRequestWithHostAccess — Used ONLY for the optional local-AI feature: it removes the Origin header on requests to the user's own local Ollama server (localhost) so the server accepts them. It does not read, block, or modify any normal web browsing.
 
 Optional host permission (http://localhost, http://127.0.0.1) — Requested at runtime ONLY if the user enables the optional local-AI feature, to talk to their own local Ollama server. Never requested otherwise.
+
+Optional "scripting" permission + site access (all sites) — Requested at runtime ONLY when the user explicitly enables "Read Pages for AI" in Settings. Used for ONE action: reading the visible text of the page the user clicks "Summarize & close" on, so the local AI can summarize it into their private reading list before the tab closes. The user can revoke both at any time in chrome://extensions or by toggling the setting off (which revokes them programmatically). Never requested otherwise, and no other feature uses them.
 ```
 
 ## 6. Data usage / privacy disclosures (review form)
@@ -77,6 +79,7 @@ Optional host permission (http://localhost, http://127.0.0.1) — Requested at r
 • Does NOT collect or transmit any user data.
 • All data is stored locally in the browser (chrome.storage). No external servers, analytics, or tracking.
 • The only optional outbound connection is to the user's OWN local Ollama server (localhost), and only if they explicitly enable the AI feature.
+• Page content is read ONLY when the user opts into "Read Pages for AI" and clicks "Summarize & close" on a tab — it is sent to their local Ollama only, stored as a local summary, and the grant can be revoked anytime.
 ```
 
 ---
