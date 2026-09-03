@@ -74,7 +74,7 @@ describe("AskAI sidebar", () => {
     await sendMessage("hi");
     const port = await waitForPort(0);
     const body = requestBody(port);
-    expect(body.tools).toHaveLength(1);
+    expect(body.tools).toHaveLength(2);
     expect(body.messages[0]).toMatchObject({ role: "system" });
     expect(body.messages[0].content).toContain("Video (youtube.com)");
     expect(body.messages[0].content).not.toContain("tabId");
@@ -314,5 +314,62 @@ describe("AskAI sidebar", () => {
     );
     expect(screen.getByText("Which tabs can I safely close?")).toBeInTheDocument();
     expect(screen.queryByRole("menu", { name: "Suggested questions" })).toBeNull();
+  });
+
+  it("executes a hibernateTab tool call via discard — no close, no undo toast", async () => {
+    const { onClosed } = renderAskAI();
+    await sendMessage("hibernate the video tab");
+    const port = await waitForPort(0);
+    driveStream(port, [
+      {
+        message: {
+          tool_calls: [
+            { function: { name: "hibernateTab", arguments: '{"title":"Video"}' } },
+          ],
+        },
+      },
+    ]);
+
+    await waitFor(() =>
+      expect(chromeMock().tabs.discard).toHaveBeenCalledWith(1),
+    );
+    expect(chromeMock().tabs.remove).not.toHaveBeenCalled();
+    expect(onClosed).not.toHaveBeenCalled();
+
+    // the tool result is fed back → a second stream request
+    await waitFor(() =>
+      expect(chromeMock().runtime.connect).toHaveBeenCalledTimes(2),
+    );
+    const body2 = requestBody(await waitForPort(1));
+    expect(body2.messages.at(-1)).toMatchObject({
+      role: "tool",
+      content: "hibernateTab: hibernated — Video",
+    });
+    driveStream(await waitForPort(1), [{ message: { content: "Done." } }]);
+    await waitFor(() => expect(screen.getByText("Done.")).toBeInTheDocument());
+  });
+
+  it("renders a Hibernate chip when the model narrates a hibernate without calling the tool", async () => {
+    useTabStore.setState({
+      tabs: [makeTab({ id: 1, title: "Video", domain: "youtube.com" })],
+    });
+    const { onClosed } = renderAskAI();
+    await sendMessage("which tabs can I hibernate?");
+    const port = await waitForPort(0);
+    driveStream(port, [
+      { message: { content: "You can hibernate the 'Video (youtube.com)' tab." } },
+    ]);
+    await waitFor(() =>
+      expect(screen.getByText(/Hibernate · Video/)).toBeInTheDocument(),
+    );
+    // nothing auto-hibernated by the text claim alone
+    expect(chromeMock().tabs.discard).not.toHaveBeenCalled();
+    expect(screen.queryByText(/Close · Video/)).toBeNull();
+
+    fireEvent.click(screen.getByText(/Hibernate · Video/));
+    await waitFor(() => expect(chromeMock().tabs.discard).toHaveBeenCalledWith(1));
+    expect(chromeMock().tabs.remove).not.toHaveBeenCalled();
+    expect(onClosed).not.toHaveBeenCalled();
+    expect(screen.queryByText(/Hibernate · Video/)).toBeNull();
   });
 });

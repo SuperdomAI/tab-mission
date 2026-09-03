@@ -35,6 +35,27 @@ export const CLOSE_TAB_TOOL = {
   },
 } as const;
 
+export const HIBERNATE_TAB_TOOL = {
+  type: "function",
+  function: {
+    name: "hibernateTab",
+    description:
+      "Hibernate (discard/unload) one or more open browser tabs by their exact title to free memory. " +
+      "The tab stays open — it just unloads and reloads on next visit. This is NOT closing. " +
+      "Never hibernate a pinned tab. Hibernates every open tab with that title.",
+    parameters: {
+      type: "object",
+      properties: {
+        title: {
+          type: "string",
+          description: "The exact title of the tab(s) to hibernate.",
+        },
+      },
+      required: ["title"],
+    },
+  },
+} as const;
+
 export type CloseTarget =
   | { tabs: EnrichedTab[]; skippedPinned: number }
   | { error: "missing-title" | "no-match" };
@@ -63,19 +84,23 @@ export function resolveCloseTarget(args: unknown, tabs: EnrichedTab[]): CloseTar
 }
 
 /** Human summary of a close-tab result, for the tool card in the thread. */
-export function closeResultText(result: CloseTarget, name: string): string {
+export function closeResultText(
+  result: CloseTarget,
+  name: string,
+  verb = "closed",
+): string {
   if ("error" in result) {
     switch (result.error) {
       case "missing-title":
-        return `${name}: no title given — nothing closed`;
+        return `${name}: no title given — nothing ${verb}`;
       case "no-match":
-        return `${name}: no open tab with that title — nothing closed`;
+        return `${name}: no open tab with that title — nothing ${verb}`;
     }
   }
-  const closed = result.tabs.map((t) => `closed — ${t.title}`).join(" · ");
+  const closed = result.tabs.map((t) => `${verb} — ${t.title}`).join(" · ");
   const pinnedNote =
-    result.skippedPinned > 0 ? ` · ${result.skippedPinned} pinned tab(s) not closed` : "";
-  return `${name}: ${closed || "nothing closed"}${pinnedNote}`;
+    result.skippedPinned > 0 ? ` · ${result.skippedPinned} pinned tab(s) not ${verb}` : "";
+  return `${name}: ${closed || `nothing ${verb}`}${pinnedNote}`;
 }
 
 // ─── text-claim fallback (weak models that narrate instead of calling) ───────
@@ -93,13 +118,30 @@ export interface CloseProposal {
   tabIds: number[];
 }
 
+const CLOSE_VERBS = "close|closing|closed|closes";
+const HIBERNATE_VERBS =
+  "hibernate|hibernates|hibernating|hibernated|discard|discards|discarding|discarded";
+
+/**
+ * Quoted "… tab" mentions, but only when the claim carries one of `verbs`
+ * before the quote ("close the 'Inbox' tab"). A verb-less or
+ * mismatched-verb quote is NOT a claim for this action — this keeps a
+ * "close" sentence from also producing a "hibernate" chip and vice versa.
+ */
+function quotedTitles(text: string, verbs: string): string[] {
+  const re = new RegExp(
+    "\\b(?:" + verbs + ")\\b[^\"'`\\n]{0,60}?[\"'`]([^\"'`\\n]{2,80})[\"'`]\\s+tab\\b",
+    "gi",
+  );
+  const out: string[] = [];
+  for (const m of text.matchAll(re)) out.push(m[1]);
+  return out;
+}
+
 /** Extract quoted or plain "close/closing/closed ... tab" mentions. */
 export function extractCloseTitles(text: string): string[] {
-  const out: string[] = [];
-  const quoted =
-    /["'`]([^"'`\n]{2,80})["'`]\s+tab\b/gi;
-  for (const m of text.matchAll(quoted)) out.push(m[1]);
-  const plain = /\b(?:close|closing|closed|closes)\b\s+(?:the\s+)?([^"'`\n.!?]{2,80}?)\s+tab\b/gi;
+  const out = quotedTitles(text, CLOSE_VERBS);
+  const plain = new RegExp(`\\b(?:${CLOSE_VERBS})\\b\\s+(?:the\\s+)?([^"'` + "`" + `\\n.!?]{2,80}?)\\s+tab\\b`, "gi");
   for (const m of text.matchAll(plain)) out.push(m[1].trim());
   return out;
 }
@@ -120,6 +162,41 @@ export function detectCloseProposals(text: string, tabs: EnrichedTab[]): ClosePr
   const seen = new Set<string>();
   const out: CloseProposal[] = [];
   for (const raw of extractCloseTitles(text)) {
+    if (seen.has(raw)) continue;
+    seen.add(raw);
+    for (const candidate of titleCandidates(raw)) {
+      const target = resolveCloseTarget({ title: candidate }, tabs);
+      if ("tabs" in target && target.tabs.length > 0) {
+        out.push({ title: candidate, tabIds: target.tabs.map((t) => t.id) });
+        break;
+      }
+    }
+  }
+  return out;
+}
+
+// ─── hibernate claims (parallel to close — same rules, different tool) ───────
+
+/** Extract quoted or plain "hibernate/discard … tab" mentions. */
+export function extractHibernateTitles(text: string): string[] {
+  const out = quotedTitles(text, HIBERNATE_VERBS);
+  const plain = new RegExp(
+    `\\b(?:${HIBERNATE_VERBS})\\b\\s+(?:the\\s+)?([^"'` + "`" + `\\n.!?]{2,80}?)\\s+tab\\b`,
+    "gi",
+  );
+  for (const m of text.matchAll(plain)) out.push(m[1].trim());
+  return out;
+}
+
+/**
+ * Resolve every hibernate-claim in the assistant's text against the live tab
+ * list (same rules as `detectCloseProposals`: exact title, "(domain)" second
+ * candidate, pinned never proposed). Returns [] when nothing resolves.
+ */
+export function detectHibernateProposals(text: string, tabs: EnrichedTab[]): CloseProposal[] {
+  const seen = new Set<string>();
+  const out: CloseProposal[] = [];
+  for (const raw of extractHibernateTitles(text)) {
     if (seen.has(raw)) continue;
     seen.add(raw);
     for (const candidate of titleCandidates(raw)) {

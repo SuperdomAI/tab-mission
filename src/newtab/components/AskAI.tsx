@@ -10,8 +10,10 @@ import {
 } from "../../lib/ollama";
 import {
   CLOSE_TAB_TOOL,
+  HIBERNATE_TAB_TOOL,
   closeResultText,
   detectCloseProposals,
+  detectHibernateProposals,
   resolveCloseTarget,
   type CloseProposal,
 } from "../../lib/ai/chatTools";
@@ -43,16 +45,17 @@ const TAB_LIST_CAP = 40;
 /**
  * Ask AI — a right-side chat sidebar (docs-site style) over the open tab
  * list, streaming from local Ollama through the SW proxy port. The model can
- * propose `closeTab` calls; the UI validates every call against the live tab
- * store and executes it via `useTabActions` ("AI proposes, UI executes").
+ * propose `closeTab` / `hibernateTab` calls; the UI validates every call
+ * against the live tab store and executes it via `useTabActions` ("AI
+ * proposes, UI executes").
  * Tabs are identified by exact title (never ids). Pinned tabs are never
- * closable. Degrades to a text-only chat when the model/Ollama has no tool
- * support (single retry without tools).
+ * closable or hibernable. Degrades to a text-only chat when the model/Ollama
+ * has no tool support (single retry without tools).
  */
 export default function AskAI({ open, onClose, onOpenSettings, onClosed }: AskAIProps) {
   const tabs = useTabStore((s) => s.tabs);
   const settings = useTabStore((s) => s.settings);
-  const { closeMany } = useTabActions();
+  const { closeMany, hibernateMany } = useTabActions();
 
   const [messages, setMessages] = useState<ChatMessageFull[]>([]);
   const [draft, setDraft] = useState("");
@@ -60,6 +63,7 @@ export default function AskAI({ open, onClose, onOpenSettings, onClosed }: AskAI
   const [pendingText, setPendingText] = useState("");
   const [toolsOff, setToolsOff] = useState(false);
   const [proposals, setProposals] = useState<CloseProposal[]>([]);
+  const [hibernateProposals, setHibernateProposals] = useState<CloseProposal[]>([]);
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
   const ctrlRef = useRef<AbortController | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -143,11 +147,16 @@ const system = useCallback(
           "in your reply. " +
           "When the user asks you to close a tab, you MUST call the closeTab tool with the tab's exact title " +
           "from the list below — replying \"Closed ...\" without calling the tool is a lie, never do it. " +
+          "When the user asks you to hibernate, discard, unload, or save memory on a tab, call the " +
+          "hibernateTab tool (same exact-title rule) — never closeTab for a hibernate request, the tab must " +
+          "stay open. Replying \"Hibernated ...\" without calling hibernateTab is a lie, never do it. " +
+          "Never invent a tab title: only mention or act on tabs that appear in the list below. " +
           "Use the exact title only, without the domain in parentheses. Do not announce the call or show the " +
           "tool name in your reply. After the tool runs you will receive its result and should reply with one " +
           'short confirmation sentence, e.g. "Closed the Inbox tab."\n' +
           "Example: user: \"close the inbox tab\" → assistant calls closeTab with title \"Inbox\", then confirms.\n" +
-          `Never close a pinned tab. Open tabs:\n${lines}`,
+          "Example: user: \"hibernate the video tab\" → assistant calls hibernateTab with title \"Video\", then confirms.\n" +
+          `Never close or hibernate a pinned tab. Open tabs:\n${lines}`,
       } as const;
     },
     [],
@@ -162,6 +171,7 @@ const system = useCallback(
     setDraft("");
     setToolsOff(false);
     setProposals([]);
+    setHibernateProposals([]);
     const userMsg: ChatMessageFull = { role: "user", content: text };
     append(userMsg);
 
@@ -191,14 +201,17 @@ const system = useCallback(
         await streamChat({
           messages: [system(useTabStore.getState().tabs), ...conv],
           model: settings.aiChatModel,
-          tools: [CLOSE_TAB_TOOL],
+          tools: [CLOSE_TAB_TOOL, HIBERNATE_TAB_TOOL],
           signal: ctrl.signal,
           onDelta: (d) => {
             acc += d;
             setPendingText(cleanAssistantText(acc));
           },
           onToolCall: (name, args) => {
-            if (name === CLOSE_TAB_TOOL.function.name) {
+            if (
+              name === CLOSE_TAB_TOOL.function.name ||
+              name === HIBERNATE_TAB_TOOL.function.name
+            ) {
               toolCalls.push({ name, arguments: JSON.stringify(args) });
             }
           },
@@ -206,9 +219,12 @@ const system = useCallback(
         });
         if (toolCalls.length === 0) {
           if (acc) append({ role: "assistant", content: cleanAssistantText(acc) });
-          // Weak models narrate closes instead of calling the tool — surface
-          // any validated close-claim as an actionable chip (never auto-close).
-          setProposals(detectCloseProposals(acc, useTabStore.getState().tabs));
+          // Weak models narrate actions instead of calling the tools — surface
+          // any validated close/hibernate-claim as an actionable chip (never
+          // auto-close or auto-hibernate from text).
+          const live = useTabStore.getState().tabs;
+          setProposals(detectCloseProposals(acc, live));
+          setHibernateProposals(detectHibernateProposals(acc, live));
           break;
         }
         // Record the assistant's tool-call turn, execute each validated call,
@@ -253,14 +269,22 @@ const system = useCallback(
         args = call.arguments;
       }
       const target = resolveCloseTarget(args, live);
-      if ("tabs" in target) {
-        const ids = target.tabs.map((t) => t.id);
-        if (ids.length > 0) void closeMany(ids); // one batched chrome.tabs.remove
-        for (const tab of target.tabs) {
-          onClosed({ title: tab.title, url: tab.url });
+      if (call.name === HIBERNATE_TAB_TOOL.function.name) {
+        // Discard is reversible — no undo toast, no onClosed.
+        if ("tabs" in target && target.tabs.length > 0) {
+          void hibernateMany(target.tabs);
         }
+        results.push(closeResultText(target, call.name, "hibernated"));
+      } else {
+        if ("tabs" in target) {
+          const ids = target.tabs.map((t) => t.id);
+          if (ids.length > 0) void closeMany(ids); // one batched chrome.tabs.remove
+          for (const tab of target.tabs) {
+            onClosed({ title: tab.title, url: tab.url });
+          }
+        }
+        results.push(closeResultText(target, call.name));
       }
-      results.push(closeResultText(target, call.name));
     }
     return results;
   }
@@ -282,6 +306,18 @@ const system = useCallback(
       onClosed({ title: tab.title, url: tab.url });
     }
     setProposals((prev) => prev.filter((x) => x.title !== p.title));
+  }
+
+  /** User clicked a "Hibernate · title" chip — validate once more, execute. */
+  function executeHibernateProposal(p: CloseProposal) {
+    const live = useTabStore.getState().tabs;
+    const target = resolveCloseTarget({ title: p.title }, live);
+    if (!("tabs" in target) || target.tabs.length === 0) {
+      setHibernateProposals((prev) => prev.filter((x) => x.title !== p.title));
+      return;
+    }
+    void hibernateMany(target.tabs);
+    setHibernateProposals((prev) => prev.filter((x) => x.title !== p.title));
   }
 
   const aiOff = !settings.ollamaEnabled;
@@ -382,6 +418,34 @@ const system = useCallback(
                       <button
                         onClick={() =>
                           setProposals((prev) => prev.filter((x) => x.title !== p.title))
+                        }
+                        aria-label={`Dismiss ${p.title}`}
+                        className="text-faint hover:text-ink transition-colors"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {hibernateProposals.length > 0 && (
+                <div className="space-y-2">
+                  <p className="label-mono">Suggested hibernations</p>
+                  {hibernateProposals.map((p) => (
+                    <div
+                      key={p.title}
+                      className="flex items-center gap-2 mr-8 bg-white/[0.03] border border-hairline rounded-[8px] px-2.5 py-2"
+                    >
+                      <button
+                        onClick={() => executeHibernateProposal(p)}
+                        className="flex-1 text-left font-mono text-[11px] text-ink truncate hover:text-accent transition-colors"
+                      >
+                        Hibernate · {p.title}
+                      </button>
+                      <button
+                        onClick={() =>
+                          setHibernateProposals((prev) => prev.filter((x) => x.title !== p.title))
                         }
                         aria-label={`Dismiss ${p.title}`}
                         className="text-faint hover:text-ink transition-colors"
