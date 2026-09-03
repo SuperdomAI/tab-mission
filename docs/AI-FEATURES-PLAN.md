@@ -1,6 +1,6 @@
 # AI Features Implementation Plan (v1.3.0 — "Tab Mission Intelligence")
 
-Scope: features 1, 2, 3, 4, 6, 7, 11, 12 from the AI brainstorm. All run on a **local Ollama** instance; nothing leaves the machine. Status: **stages A–D landed** (PR A: shared infra + settings fields; PR B: F1 daily debrief + F11 habits coach + settings model tiers; PR C: F2 AI triage overlay + F12 idle drafts; PR D: F3 proactive suggestions + F4 session memory). Remaining: F7 (PR E), F6 (PR F).
+Scope: features 1, 2, 3, 4, 6, 7, 11, 12 from the AI brainstorm. All run on a **local Ollama** instance; nothing leaves the machine. Status: **stages A–E landed** (PR A: shared infra + settings fields; PR B: F1 daily debrief + F11 habits coach + settings model tiers; PR C: F2 AI triage overlay + F12 idle drafts; PR D: F3 proactive suggestions + F4 session memory; PR E: F7 semantic ⌘K search). Remaining: F6 (PR F).
 
 ---
 
@@ -41,7 +41,7 @@ Storage additions (all `chrome.storage.local`, all regenerable):
 | `aiSessionSummaries` | UI + SW | `{ [sessionId]: { summary, generatedAt, model } }` |
 | `aiSuggestions` | UI | `{ signature, items: { goal, tabIds, reason }[], dismissed: boolean }` |
 | `aiReadingList` | UI | `{ id, url, title, summary, savedAt }[]` (cap 100) |
-| `aiTabEmbeddings` | UI + SW | `{ model, dims, vectors: { [tabId]: number[] } }` — re-embed when `model` changes |
+| `aiTabEmbeddings` | UI | `{ model, dims, vectors: { [tabId]: { title, vector, embeddedAt } } }` — landed in PR E; keyed by `{model, tabId, title}`, TTL 24 h, re-embedded on model change |
 
 Settings additions (`AppSettings`, `chrome.storage.sync`): a single **AI Assist** master toggle (reuses `ollamaEnabled`) plus:
 - `aiFastModel` (classification/triage default), `aiChatModel` (summaries/reports default), `aiEmbedModel` (default `nomic-embed-text`)
@@ -113,11 +113,11 @@ Total resident with KV cache ≈ 6-7 GB — comfortable on 16 GB alongside Chrom
 - **UI:** "Summarize & close" action on `TabRow` / `DeckPopover` rows (small ghost button, hover-revealed — design system: metadata recedes); "Reading list" section in the Sessions drawer (or own drawer if it outgrows).
 - **Tests:** content truncation, prompt, parse, list cap, close-order guarantee.
 
-### F7 — Semantic ⌘K search
+### F7 — Semantic ⌘K search — landed in PR E
 - **Inputs:** tab title + domain (+ summary/content if F6 content available). Embed model.
-- **Mechanics:** lazy embed on palette open (each tab once), cache in `aiTabEmbeddings` keyed by `{ model, tabId, title }`; query embed debounced 250 ms; cosine threshold ≈ 0.32; merge with Fuse results (semantic group first when above threshold, Fuse after). AI off → pure Fuse (today's behavior).
-- **UI:** `CommandPalette.tsx` — no visual change beyond a subtle "semantic" hint on AI-matched rows (hue = information rule: use a faint accent dot, not decoration).
-- **Tests:** cosine, top-k merge, threshold gating, cache invalidation.
+- **Mechanics:** lazy embed on palette open (each tab once, one batch call), cache in `aiTabEmbeddings` keyed by `{ model, tabId, title }` (UI-owned; per-entry `title`/`embeddedAt` are additive to the plan doc's envelope sketch — TTL 24 h, whole-envelope re-embed on model change, per-tab on title change, pruned for closed tabs); query embed debounced 250 ms; cosine threshold ≈ 0.32; merge with Fuse results (semantic group first when above threshold, Fuse after). AI off → pure Fuse (today's behavior).
+- **UI:** `CommandPalette.tsx` — no visual change beyond a subtle accent dot on AI-matched rows (hue = information rule: it flags the semantic origin of the match, not decoration).
+- **Tests:** cosine, top-k merge, threshold gating, cache invalidation (model/title/TTL), batch re-embed, semantic-first merge flagging.
 
 ### F11 — Habits coach (weekly insight)
 - **Inputs:** last 30 days of `analytics` (domainTime per day, opened/closed, debtScore). Chat model.
@@ -154,7 +154,7 @@ Settings drawer: extend the Local AI section — model fields per tier, "Read pa
 | **B** | F1 debrief + F11 coach (read-only reports, cached) | none |
 | ✅ **C** | F2 triage overlay + F12 idle drafts (session-first close path) | low |
 | ✅ **D** | F3 suggestions + F4 session memory (additive storage, SW hook) | low |
-| **E** | F7 semantic ⌘K search (fallback preserved) | low |
+| ✅ **E** | F7 semantic ⌘K search (fallback preserved) | low |
 | **F** | F6 summarize-then-close (optional permissions, store-review note) | medium (perms) |
 
 Every PR: `npm run typecheck` + `npm run test:run` + `npm run build`, new tests alongside, CHANGELOG entry, `docs/ARCHITECTURE.md` storage-schema section update. Version bumps at the end of each stage (next: 1.3.0).

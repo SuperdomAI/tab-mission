@@ -268,7 +268,7 @@ Store updates that flow from `chrome.storage.onChanged` are wrapped in `startTra
 | `TriageProposal`    | `open, onClose`    | `tabs, settings` + `useTriagePlan` | `storage.local` write (`aiTriagePlan`, `aiIdleDraftDismissedAt`), Ollama via `bgFetch`, `saveAndClose` |
 | `StacksView`        | `onFocus`          | `tabs`                      | —                                                              |
 | `SuggestionsStrip`  | `onFocus`          | `tabs, settings` + `useSuggestions` | `storage.local` write (`aiSuggestions`), Ollama via `bgFetch` |
-| `CommandPalette`    | `onFocus, onOpenWorkspaces, onAskAI` | `tabs, settings, sessions` + `useSessionSummaries` | `windows.create` (session restore), `tabs.update`, `windows.update`, `tabs.remove`, `tabs.discard` |
+| `CommandPalette`    | `onFocus, onOpenWorkspaces, onAskAI` | `tabs, settings, sessions` + `useSessionSummaries` + `useTabEmbeddings` | `windows.create` (session restore), `tabs.update`, `windows.update`, `tabs.remove`, `tabs.discard`; `storage.local` write (`aiTabEmbeddings`), Ollama via `bgFetch` (embeddings) |
 | `Tooltip`            | `text, position?, align?` | —                    | —                                                              |
 
 ---
@@ -286,6 +286,7 @@ Store updates that flow from `chrome.storage.onChanged` are wrapped in `startTra
 | `aiIdleDraftDismissedAt` | `local` | `number` (timestamp) | UI-owned notice flag |
 | `aiSuggestions` | `local` | `Suggestions` (see below) | Single plan, TTL 30 min, regen on ≥ 5-tab change |
 | `aiSessionSummaries` | `local` | `SessionSummariesMap` (see below) | Entries pruned after 30 days |
+| `aiTabEmbeddings` | `local` | `TabEmbeddings` (see below) | Per-tab vectors, TTL 24 h, re-embedded on model/title change |
 
 ### `aiReports` (UI-owned, landed in PR B)
 
@@ -334,12 +335,27 @@ aiSessionSummaries: {
 }
 ```
 
-### AI cache keys (planned — stages E–F of `docs/AI-FEATURES-PLAN.md`)
+### `aiTabEmbeddings` (UI-owned, landed in PR E)
+
+F7 semantic ⌘K search. A single embeddings object for one embed model written ONLY by the React layer (`useTabEmbeddings` → `TabEmbeddingCache` in `src/lib/ai/tabEmbeddings.ts`) — the same UI-owned precedent as `aiReports` / `aiSuggestions`; the service worker never touches it. Each per-tab vector is keyed by the triple `{ model, tabId, title }` (the per-entry `title`/`embeddedAt` fields are additive beyond the plan doc's `{ model, dims, vectors: { [tabId]: number[] } }` sketch): a model change invalidates the whole envelope (different vector space — the first write under the new model starts a fresh map), a title change invalidates just that tab, and `embeddedAt` enforces the `embed` task TTL (24 h). While the palette is open, `ensureTabEmbeddings` batch-embeds only the stale entries (missing / expired / wrong model / title changed) and prunes vectors for closed tabs; the query is embedded after a 250 ms debounce and scored with `searchSemanticTabs` (cosine ≥ `COSINE_THRESHOLD` 0.32 over fresh vectors only), then `searchTabsSemantic` in `src/lib/commandFilter.ts` merges semantic-first with the Fuse tab search (deduped; embedding-matched rows are flagged for the subtle accent dot). Failure anywhere degrades silently to pure Fuse.
+
+```
+aiTabEmbeddings: {
+  model,                                  // embed model (e.g. nomic-embed-text)
+  dims,                                   // vector dimensionality (consistency enforced)
+  vectors: {
+    [tabId]: { title,                    // the embedded text ("<title> <domain>")
+               vector: number[],         // length === dims
+               embeddedAt }              // embed task TTL 24 h
+  }
+}
+```
+
+### AI cache keys (planned — stage F of `docs/AI-FEATURES-PLAN.md`)
 
 | Key | Contents |
 | --- | --- |
 | `aiReadingList` | capped at 100 entries (F6) |
-| `aiTabEmbeddings` | `{ model, dims, vectors: { [tabId]: number[] } }` — re-embedded when `model` changes |
 
 ---
 
