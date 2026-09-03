@@ -38,3 +38,7 @@ pnpm-debug.log*
 # Vite cache
 .vite/
 .gstack/
+
+# Local agent config (AGENTS.md is the public agent guide)
+.claude/
+CLAUDE.md

@@ -15,7 +15,7 @@ Thanks for taking the time to contribute! This is a focused Chrome extension —
 ### Local setup
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/tab-mission.git
+git clone https://github.com/SuperdomAI/tab-mission.git
 cd tab-mission
 npm install
 npm run dev   # auto-rebuilds on every save
@@ -36,7 +36,7 @@ After code changes, click the **↺ Reload** icon on the extension card.
 
 ### Reporting a bug
 
-Open an [issue](https://github.com/YOUR_USERNAME/tab-mission/issues) with:
+Open an [issue](https://github.com/SuperdomAI/tab-mission/issues) with:
 
 - Chrome version and OS
 - Steps to reproduce
