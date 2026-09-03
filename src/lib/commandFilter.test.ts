@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   buildTabFuse,
   searchTabs,
+  searchTabsSemantic,
   buildSessionFuse,
   searchSessions,
   filterCommands,
@@ -92,5 +93,50 @@ describe("buildSessionFuse / searchSessions (F4)", () => {
     const fuse = buildSessionFuse(sessions, {});
     expect(searchSessions(fuse, "")).toEqual([]);
     expect(searchSessions(fuse, "   ")).toEqual([]);
+  });
+});
+
+describe("searchTabsSemantic (F7)", () => {
+  const tabs = [
+    makeTab({ id: 1, title: "GitHub Pull Requests", domain: "github.com", url: "https://github.com/pulls" }),
+    makeTab({ id: 2, title: "Figma — Command Center", domain: "figma.com", url: "https://figma.com/x" }),
+    makeTab({ id: 3, title: "Gmail Inbox", domain: "mail.google.com", url: "https://mail.google.com" }),
+    makeTab({ id: 4, title: "NPM package docs", domain: "npmjs.com", url: "https://npmjs.com/x" }),
+  ];
+  const fuse = buildTabFuse(tabs);
+
+  it("ranks semantic hits first, then Fuse results, flagging only semantic rows", () => {
+    const results = searchTabsSemantic(
+      tabs,
+      fuse,
+      "figma",
+      [{ id: 4, score: 0.9 }, { id: 2, score: 0.7 }],
+    );
+    expect(results.map((r) => r.tab.id)).toEqual([4, 2]);
+    expect(results.map((r) => r.semantic)).toEqual([true, true]);
+  });
+
+  it("dedupes ids present in both lists (flagged semantic once)", () => {
+    const results = searchTabsSemantic(
+      tabs,
+      fuse,
+      "github",
+      [{ id: 1, score: 0.8 }],
+    );
+    expect(results.map((r) => r.tab.id)).toEqual([1]);
+    expect(results[0].semantic).toBe(true);
+  });
+
+  it("with no semantic hits behaves exactly like pure Fuse (all rows unmarked)", () => {
+    const results = searchTabsSemantic(tabs, fuse, "figma", []);
+    expect(results.map((r) => r.tab.id)).toEqual([2]);
+    expect(results.every((r) => !r.semantic)).toBe(true);
+  });
+
+  it("returns [] for an empty query and ignores ids not in the tab set", () => {
+    expect(searchTabsSemantic(tabs, fuse, "  ", [{ id: 1, score: 0.9 }])).toEqual([]);
+    const results = searchTabsSemantic(tabs, fuse, "", [{ id: 1, score: 0.9 }]);
+    expect(results).toEqual([]);
+    expect(searchTabsSemantic(tabs, fuse, "figma", [{ id: 99, score: 0.9 }]).map((r) => r.tab.id)).toEqual([2]);
   });
 });

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Command } from "cmdk";
 import { useTabStore } from "../../store/tabStore";
 import Overlay from "./Overlay";
@@ -6,13 +6,23 @@ import Favicon from "./Favicon";
 import { useTabActions } from "../hooks/useTabActions";
 import { useSession } from "../hooks/useSession";
 import { useSessionSummaries } from "../hooks/useSessionSummaries";
+import { useTabEmbeddings } from "../hooks/useTabEmbeddings";
+import { ensureOllamaPermission, embed } from "../../lib/ollama";
+import {
+  ensureTabEmbeddings,
+  searchSemanticTabs,
+  QUERY_DEBOUNCE_MS,
+  type ScoredMatch,
+} from "../../lib/ai/tabEmbeddings";
 import {
   buildTabFuse,
   searchTabs,
+  searchTabsSemantic,
   buildSessionFuse,
   searchSessions,
   filterCommands,
   type PaletteCommand,
+  type TabSearchResult,
 } from "../../lib/commandFilter";
 import { selectDuplicates, selectUnvisited, selectZombies } from "../../lib/bulkSelectors";
 
@@ -33,6 +43,11 @@ export default function CommandPalette({ onFocus, onOpenWorkspaces, onAskAI }: C
   const { closeMany, hibernateMany, jumpTo } = useTabActions();
   const { restoreSession } = useSession();
   const { summaries } = useSessionSummaries();
+  const { cache: embedCache, save: saveEmbeddings } = useTabEmbeddings();
+
+  // F7 semantic search gate: AI master + per-feature toggle. Off → pure Fuse.
+  const semanticOn = settings.ollamaEnabled && settings.aiSemanticSearch;
+  const embedModel = settings.aiEmbedModel;
 
   // ⌘K / Ctrl+K toggles the palette — the ONE owner of this shortcut.
   useEffect(() => {
@@ -50,8 +65,63 @@ export default function CommandPalette({ onFocus, onOpenWorkspaces, onAskAI }: C
     if (!open) setQuery("");
   }, [open]);
 
+  // Lazy per-tab embeddings while the palette is open: batch-embed only the
+  // stale entries (missing, expired, wrong model, title changed), prune
+  // closed tabs, save only when the cache actually changed. Any failure
+  // falls back to pure Fuse — semantic search never blocks the palette.
+  useEffect(() => {
+    if (!open || !semanticOn) return;
+    let alive = true;
+    void ensureTabEmbeddings(tabs, embedModel, embedCache)
+      .then(async (next) => {
+        if (alive && next !== embedCache) {
+          const granted = await ensureOllamaPermission();
+          if (granted) await saveEmbeddings(next);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [open, semanticOn, tabs, embedCache, saveEmbeddings, embedModel]);
+
+  // Query embedding, debounced: on every query change, wait 250 ms of quiet
+  // typing, then embed the query and score it against the fresh tab vectors
+  // (cosine ≥ COSINE_THRESHOLD). A sequence guard drops stale responses, so
+  // an older embed can never overwrite a newer query's results.
+  const [semanticHits, setSemanticHits] = useState<ScoredMatch[] | null>(null);
+  const querySeq = useRef(0);
+
+  useEffect(() => {
+    const q = query.trim();
+    if (!open || !semanticOn || !q) {
+      setSemanticHits(null);
+      return;
+    }
+    const seq = ++querySeq.current;
+    const t = setTimeout(() => {
+      void (async () => {
+        try {
+          const granted = await ensureOllamaPermission();
+          if (!granted || querySeq.current !== seq) return;
+          const [vec] = await embed([q], embedModel);
+          if (querySeq.current !== seq) return;
+          setSemanticHits(searchSemanticTabs(vec, embedCache, embedModel));
+        } catch {
+          if (querySeq.current === seq) setSemanticHits(null);
+        }
+      })();
+    }, QUERY_DEBOUNCE_MS);
+    return () => clearTimeout(t);
+  }, [open, semanticOn, query, embedCache, embedModel]);
+
   const fuse = useMemo(() => buildTabFuse(tabs), [tabs]);
-  const tabResults = useMemo(() => searchTabs(fuse, query), [fuse, query]);
+  const tabResults = useMemo<TabSearchResult[]>(() => {
+    if (!semanticOn) {
+      return searchTabs(fuse, query).map((t) => ({ tab: t, semantic: false }));
+    }
+    return searchTabsSemantic(tabs, fuse, query, semanticHits ?? [], 8);
+  }, [semanticOn, tabs, fuse, query, semanticHits]);
 
   const sessions = useTabStore((s) => s.sessions);
   const sessionFuse = useMemo(
@@ -134,18 +204,25 @@ export default function CommandPalette({ onFocus, onOpenWorkspaces, onAskAI }: C
 
           {tabResults.length > 0 && (
             <Command.Group heading="Tabs">
-              {tabResults.map((t) => (
+              {tabResults.map(({ tab, semantic }) => (
                 <Command.Item
-                  key={t.id}
-                  value={`tab-${t.id}`}
+                  key={tab.id}
+                  value={`tab-${tab.id}`}
                   onSelect={() => {
-                    jumpTo(t);
+                    jumpTo(tab);
                     setOpen(false);
                   }}
                 >
-                  <Favicon tab={t} size={16} rounded={4} />
-                  <span className="truncate">{t.title || t.url}</span>
-                  <span className="ml-auto font-mono text-[10px] text-faint shrink-0">{t.domain}</span>
+                  <Favicon tab={tab} size={16} rounded={4} />
+                  {semantic && (
+                    <span
+                      title="Semantic match"
+                      aria-label="Semantic match"
+                      className="size-[5px] shrink-0 rounded-full bg-accent"
+                    />
+                  )}
+                  <span className="truncate">{tab.title || tab.url}</span>
+                  <span className="ml-auto font-mono text-[10px] text-faint shrink-0">{tab.domain}</span>
                 </Command.Item>
               ))}
             </Command.Group>
