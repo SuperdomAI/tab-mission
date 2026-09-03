@@ -1,4 +1,5 @@
 import type { EnrichedTab } from "../../types/index";
+import { truncatePageText } from "../pageExtract";
 
 /**
  * Ask AI sidebar — tool calling.
@@ -170,6 +171,28 @@ export const UNPIN_TAB_TOOL = {
         title: {
           type: "string",
           description: "The exact title of the tab(s) to unpin.",
+        },
+      },
+      required: ["title"],
+    },
+  },
+} as const;
+
+export const READ_PAGE_TOOL = {
+  type: "function",
+  function: {
+    name: "readPage",
+    description:
+      "Read the visible content of an open browser tab by its exact title (from the open tabs list). " +
+      "Use this when the user asks what's on a page, to summarize a specific tab, or to act on its content. " +
+      "You will receive the page text as the tool result — then summarize or answer from it. " +
+      "Reading is read-only; nothing is closed, hibernated, or modified.",
+    parameters: {
+      type: "object",
+      properties: {
+        title: {
+          type: "string",
+          description: "The exact title of the tab to read.",
         },
       },
       required: ["title"],
@@ -404,6 +427,23 @@ export function groupResultText(result: GroupTarget, name = "groupTabs"): string
 /** Human summary of a save-session result. */
 export function saveSessionResultText(count: number, name: string): string {
   return `saveSession: saved ${count} tab(s) as "${name}"`;
+}
+
+// ─── readPage — read-only page content for the model ─────────────────────────
+
+/** Page-text cap fed to the model in the tool result (chat context is precious). */
+export const READ_PAGE_TEXT_CAP = 4000;
+
+/** Human summary of a readPage refusal. */
+export function readPageRefusalText(reason: "no-permission" | "unreadable"): string {
+  return reason === "no-permission"
+    ? 'readPage: page-reading is off — enable "Read Pages for AI" in Settings'
+    : "readPage: couldn't read that page (restricted or unavailable) — nothing happened";
+}
+
+/** Tool-result payload for a successful read: title + truncated page text. */
+export function readPageSuccessText(title: string, text: string, cap = READ_PAGE_TEXT_CAP): string {
+  return `readPage: content of "${title}" (truncated):\n${truncatePageText(text, cap)}`;
 }
 
 // ─── hibernate claims (parallel to close — same rules, different tool) ───────

@@ -74,7 +74,7 @@ describe("AskAI sidebar", () => {
     await sendMessage("hi");
     const port = await waitForPort(0);
     const body = requestBody(port);
-    expect(body.tools).toHaveLength(8);
+    expect(body.tools).toHaveLength(9);
     expect(body.messages[0]).toMatchObject({ role: "system" });
     expect(body.messages[0].content).toContain("Video (youtube.com)");
     expect(body.messages[0].content).not.toContain("tabId");
@@ -608,5 +608,97 @@ describe("AskAI sidebar", () => {
     });
     driveStream(await waitForPort(3), [{ message: { content: "Unpinned." } }]);
     await waitFor(() => expect(screen.getByText("Unpinned.")).toBeInTheDocument());
+  });
+
+  it("executes a readPage tool call — page text fed back to the model", async () => {
+    (chromeMock().scripting.executeScript as ReturnType<typeof vi.fn>).mockResolvedValueOnce([
+      { result: { title: "Video", text: "Lots of video content here." } },
+    ]);
+    renderAskAI();
+    await sendMessage("what's on the video tab?");
+    const port = await waitForPort(0);
+    driveStream(port, [
+      {
+        message: {
+          tool_calls: [
+            { function: { name: "readPage", arguments: '{"title":"Video"}' } },
+          ],
+        },
+      },
+    ]);
+
+    await waitFor(() =>
+      expect(chromeMock().scripting.executeScript).toHaveBeenCalledWith(
+        expect.objectContaining({ target: { tabId: 1 } }),
+      ),
+    );
+    // nothing destructive happened alongside the read
+    expect(chromeMock().tabs.remove).not.toHaveBeenCalled();
+    expect(chromeMock().tabs.discard).not.toHaveBeenCalled();
+    expect(chromeMock().tabs.create).not.toHaveBeenCalled();
+
+    await waitFor(() =>
+      expect(chromeMock().runtime.connect).toHaveBeenCalledTimes(2),
+    );
+    const body2 = requestBody(await waitForPort(1));
+    expect(body2.messages.at(-1)).toMatchObject({
+      role: "tool",
+      content: expect.stringContaining('readPage: content of "Video" (truncated):'),
+    });
+    driveStream(await waitForPort(1), [{ message: { content: "It's about videos." } }]);
+    await waitFor(() => expect(screen.getByText("It's about videos.")).toBeInTheDocument());
+  });
+
+  it("readPage refuses when page-reading is not granted — nothing read", async () => {
+    (chromeMock().permissions.contains as ReturnType<typeof vi.fn>).mockResolvedValue(false);
+    renderAskAI();
+    await sendMessage("summarize the video tab");
+    const port = await waitForPort(0);
+    driveStream(port, [
+      {
+        message: {
+          tool_calls: [
+            { function: { name: "readPage", arguments: '{"title":"Video"}' } },
+          ],
+        },
+      },
+    ]);
+
+    await waitFor(() =>
+      expect(chromeMock().runtime.connect).toHaveBeenCalledTimes(2),
+    );
+    expect(chromeMock().scripting.executeScript).not.toHaveBeenCalled();
+    const body2 = requestBody(await waitForPort(1));
+    expect(body2.messages.at(-1)).toMatchObject({
+      role: "tool",
+      content: 'readPage: page-reading is off — enable "Read Pages for AI" in Settings',
+    });
+  });
+
+  it("readPage refuses on restricted pages (executeScript rejects)", async () => {
+    (chromeMock().scripting.executeScript as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new Error("Cannot access contents of url"),
+    );
+    renderAskAI();
+    await sendMessage("read the chrome page");
+    const port = await waitForPort(0);
+    driveStream(port, [
+      {
+        message: {
+          tool_calls: [
+            { function: { name: "readPage", arguments: '{"title":"Video"}' } },
+          ],
+        },
+      },
+    ]);
+
+    await waitFor(() =>
+      expect(chromeMock().runtime.connect).toHaveBeenCalledTimes(2),
+    );
+    const body2 = requestBody(await waitForPort(1));
+    expect(body2.messages.at(-1)).toMatchObject({
+      role: "tool",
+      content: "readPage: couldn't read that page (restricted or unavailable) — nothing happened",
+    });
   });
 });
