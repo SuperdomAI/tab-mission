@@ -1,5 +1,20 @@
-import type { EnrichedTab, DailyAnalytics, SavedSession } from "../types/index";
+import type {
+  AppSettings,
+  EnrichedTab,
+  DailyAnalytics,
+  SavedSession,
+} from "../types/index";
+import { mergeSettings } from "../types/index";
 import { withTabsLock } from "./tabsLock";
+import { generate } from "../lib/ollama";
+import { buildTriagePrompt } from "../lib/ai/prompts";
+import { tabSetSignature } from "../lib/ai/signatures";
+import {
+  AI_TRIAGE_KEY,
+  coerceTriagePlan,
+  parseTriagePlan,
+  triageCandidates,
+} from "../lib/ai/triage";
 
 // ─── Ollama CORS: strip the Origin header for localhost:11434 ────────────────
 // Chrome attaches `Origin: chrome-extension://<id>` to extension requests, and
@@ -393,6 +408,9 @@ chrome.idle.onStateChanged.addListener((state) =>
       await flushActiveTime();
       userIdle = true;
       activationTime = null;
+      // F12 — best-effort triage draft while the machine is idle (below).
+      const tabs = await getTabs();
+      void draftIdleTriage(tabs);
     } else {
       userIdle = false;
       if (activeTabId !== null && windowFocused) {
@@ -401,6 +419,46 @@ chrome.idle.onStateChanged.addListener((state) =>
     }
   }),
 );
+
+// ─── F12 idle-time triage drafts ─────────────────────────────────────────────
+// On idle, if AI is on and the open tab set changed since the last draft,
+// generate a triage plan in the background and store it under `aiTriagePlan`
+// with source "idle". Fire-and-forget — never awaited, never wakes the worker
+// deliberately (MV3 may kill it mid-generation; the on-demand triage path in
+// the UI always works). The signature check is the retry-storm guard.
+async function draftIdleTriage(tabs: EnrichedTab[]): Promise<void> {
+  try {
+    const [settingsRes, planRes] = await Promise.all([
+      chrome.storage.sync.get("settings"),
+      chrome.storage.local.get(AI_TRIAGE_KEY),
+    ]);
+    const settings = mergeSettings(settingsRes.settings as AppSettings | undefined);
+    if (!settings.ollamaEnabled || !settings.aiTriage || !settings.aiIdleDrafts) {
+      return;
+    }
+    if (tabs.length < 8) return;
+    const candidates = triageCandidates(tabs, settings);
+    if (candidates.length === 0) return;
+    const signature = tabSetSignature(candidates);
+    const existing = coerceTriagePlan(planRes[AI_TRIAGE_KEY]);
+    if (existing?.signature === signature) return; // same tab set — no draft
+    const model = settings.aiFastModel;
+    const text = await generate(buildTriagePrompt(candidates), model, "fast");
+    const items = parseTriagePlan(text, candidates.map((t) => t.id));
+    if (!items) return;
+    await chrome.storage.local.set({
+      [AI_TRIAGE_KEY]: {
+        signature,
+        items,
+        generatedAt: Date.now(),
+        source: "idle",
+        model,
+      },
+    });
+  } catch (e) {
+    console.error("[TMC] idle triage draft error:", e);
+  }
+}
 
 // ─── Periodic snapshot alarm ──────────────────────────────────────────────────
 
