@@ -31,6 +31,12 @@ export interface ChromeMock {
   };
   tabGroups: { TAB_GROUP_ID_NONE: number };
   runtime: { getURL: (p: string) => string; id: string };
+  scripting: { executeScript: ReturnType<typeof vi.fn> };
+  permissions: {
+    contains: ReturnType<typeof vi.fn>;
+    request: ReturnType<typeof vi.fn>;
+    remove: ReturnType<typeof vi.fn>;
+  };
 }
 
 export function makeChromeMock(): ChromeMock {
@@ -65,6 +71,15 @@ export function makeChromeMock(): ChromeMock {
     runtime: {
       getURL: (p: string) => `chrome-extension://test-ext-id${p}`,
       id: "test-ext-id",
+    },
+    scripting: {
+      // Resolves with the injected function's result by default.
+      executeScript: vi.fn().mockResolvedValue([{ result: undefined }]),
+    },
+    permissions: {
+      contains: vi.fn().mockResolvedValue(true),
+      request: vi.fn().mockResolvedValue(true),
+      remove: vi.fn().mockResolvedValue(true),
     },
   };
 }

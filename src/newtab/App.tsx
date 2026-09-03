@@ -1,7 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useTabs } from "./hooks/useTabs";
 import { useTabStore, useShallow } from "../store/tabStore";
 import { useWorkspaces } from "./hooks/useWorkspaces";
+import { useReadingList } from "./hooks/useReadingList";
 import CommandPalette from "./components/CommandPalette";
 import ViewSwitcher from "./components/ViewSwitcher";
 import StacksView from "./components/StacksView";
@@ -14,6 +15,8 @@ import AnalyticsDashboard from "./components/AnalyticsDashboard";
 import Settings from "./components/Settings";
 import Tooltip from "./components/Tooltip";
 import superdomLogo from "../assets/superdom-logo.svg";
+import type { EnrichedTab } from "../types/index";
+import type { ReadingEntry } from "../lib/ai/readingList";
 
 // Swap this one-liner anytime — it shows in the footer next to the credit.
 const FOOTER_TAGLINE = "Rescuing your RAM, one tab at a time.";
@@ -37,14 +40,32 @@ export default function App() {
   const [showAskAI, setShowAskAI] = useState(false);
   const [focusGoal, setFocusGoal] = useState<string | null>(null);
   const [toast, setToast] = useState<{ count: number } | null>(null);
+  const [readToast, setReadToast] = useState<ReadingEntry | null>(null);
 
   const { undoLast } = useWorkspaces();
+  const { summarizeAndClose, undoEntry } = useReadingList();
 
   useEffect(() => {
     if (!toast) return;
     const id = setTimeout(() => setToast(null), 8000);
     return () => clearTimeout(id);
   }, [toast]);
+
+  useEffect(() => {
+    if (!readToast) return;
+    const id = setTimeout(() => setReadToast(null), 8000);
+    return () => clearTimeout(id);
+  }, [readToast]);
+
+  // F6 — summarize-then-close: fire the pipeline and surface the undo toast
+  // only when an entry was actually saved (restricted pages / AI down → null).
+  const handleSummarizeClose = useCallback(
+    async (tab: EnrichedTab) => {
+      const entry = await summarizeAndClose(tab);
+      if (entry) setReadToast(entry);
+    },
+    [summarizeAndClose],
+  );
 
   const tabCount = tabs.length;
   const windows = new Set(tabs.map((t) => t.windowId)).size;
@@ -104,9 +125,12 @@ export default function App() {
         ) : tabCount === 0 ? (
           <EmptyState />
         ) : viewMode === "stacks" ? (
-          <StacksView onFocus={(goal) => setFocusGoal(goal)} />
+          <StacksView
+            onFocus={(goal) => setFocusGoal(goal)}
+            onSummarizeClose={handleSummarizeClose}
+          />
         ) : (
-          <TimelineView />
+          <TimelineView onSummarizeClose={handleSummarizeClose} />
         )}
       </main>
 
@@ -157,7 +181,7 @@ export default function App() {
       <WorkspacesManager open={showWorkspaces} onClose={() => setShowWorkspaces(false)} />
       <AskAI open={showAskAI} onClose={() => setShowAskAI(false)} />
 
-      {/* ── Undo toast ─────────────────────────────────────────────── */}
+      {/* ── Undo toast (workspaces) ────────────────────────────────── */}
       {toast && (
         <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[60] flex items-center gap-3 bg-popover border border-border rounded-[12px] px-4 py-3 shadow-[0_24px_60px_-20px_#000] animate-fade-in-up">
           <span className="text-[13px] text-ink">
@@ -167,6 +191,24 @@ export default function App() {
             onClick={async () => {
               await undoLast();
               setToast(null);
+            }}
+            className="text-[12px] text-accent font-medium hover:brightness-110"
+          >
+            Undo
+          </button>
+        </div>
+      )}
+
+      {/* ── Undo toast (summarize & close) ─────────────────────────── */}
+      {readToast && (
+        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[60] flex items-center gap-3 bg-popover border border-border rounded-[12px] px-4 py-3 shadow-[0_24px_60px_-20px_#000] animate-fade-in-up">
+          <span className="text-[13px] text-ink">
+            Summarized 1 tab · saved to reading list
+          </span>
+          <button
+            onClick={async () => {
+              await undoEntry(readToast);
+              setReadToast(null);
             }}
             className="text-[12px] text-accent font-medium hover:brightness-110"
           >

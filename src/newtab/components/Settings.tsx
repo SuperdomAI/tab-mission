@@ -3,6 +3,10 @@ import { useTabStore } from "../../store/tabStore";
 import type { AppSettings } from "../../types/index";
 import { ensureOllamaPermission, detectOllama, listModels } from "../../lib/ollama";
 import { pickMissingModels, recommendedProfile } from "../../lib/ai/models";
+import {
+  requestPageReadingPermission,
+  revokePageReadingPermission,
+} from "../../lib/pageReading";
 import Switch from "./Switch";
 
 interface SettingsProps {
@@ -17,6 +21,28 @@ export default function Settings({ open, onClose }: SettingsProps) {
   const [isPending, startTransition] = useTransition();
   const [saved, setSaved] = useState(false);
   const [aiStatus, setAiStatus] = useState("");
+  const [pageStatus, setPageStatus] = useState("");
+
+  // F6 — "Read pages for AI" requests the optional `scripting` + <all_urls>
+  // host grants at this explicit opt-in moment, and revokes them on opt-out
+  // (optional permissions can be removed programmatically). Every other
+  // feature works without these grants.
+  async function togglePageReading() {
+    const next = !local.aiPageReadingEnabled;
+    if (next) {
+      setPageStatus("Requesting page-reading permission…");
+      const granted = await requestPageReadingPermission();
+      if (!granted) {
+        setPageStatus("Permission denied — page reading stays off.");
+        return;
+      }
+      setPageStatus("Enabled — Summarize & close is available (revocable anytime).");
+    } else {
+      await revokePageReadingPermission();
+      setPageStatus("");
+    }
+    update("aiPageReadingEnabled", next);
+  }
 
   async function toggleOllama() {
     const next = !local.ollamaEnabled;
@@ -357,21 +383,20 @@ export default function Settings({ open, onClose }: SettingsProps) {
                       Read Pages for AI
                     </label>
                     <p className="text-xs text-faint mt-0.5">
-                      Lets AI summarize pages you close and search their content
-                      (optional, off by default).
+                      Lets AI summarize pages you close (optional, off by
+                      default). Requests access to page content on first use
+                      and can be revoked here or in chrome://extensions.
                     </p>
                   </div>
                   <Switch
                     checked={local.aiPageReadingEnabled}
-                    onChange={() =>
-                      update(
-                        "aiPageReadingEnabled",
-                        !local.aiPageReadingEnabled,
-                      )
-                    }
+                    onChange={() => void togglePageReading()}
                     label="Read pages for AI"
                   />
                 </div>
+                {pageStatus && (
+                  <p className="text-xs text-accent mt-1.5">{pageStatus}</p>
+                )}
 
                 {/* Per-feature toggles */}
                 <div className="mt-3 pt-3 border-t border-hairline space-y-2.5">

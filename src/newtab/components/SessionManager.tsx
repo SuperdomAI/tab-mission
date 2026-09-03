@@ -2,6 +2,7 @@ import React from "react";
 import { format } from "date-fns";
 import { useSession } from "../hooks/useSession";
 import { useSessionSummaries } from "../hooks/useSessionSummaries";
+import { useReadingList } from "../hooks/useReadingList";
 import { useTabStore } from "../../store/tabStore";
 
 interface SessionManagerProps {
@@ -13,6 +14,7 @@ export default function SessionManager({ open, onClose }: SessionManagerProps) {
   const { sessions, restoreSession, deleteSession, saveSession, isPending } =
     useSession();
   const { get } = useSessionSummaries();
+  const { entries, removeEntry } = useReadingList();
   const settings = useTabStore((s) => s.settings);
 
   function handleSave() {
@@ -22,6 +24,16 @@ export default function SessionManager({ open, onClose }: SessionManagerProps) {
     );
     if (name) saveSession(name);
   }
+
+  const readingOn = settings.ollamaEnabled && settings.aiPageReadingEnabled;
+  const readingEntries = entries.toArray().reverse();
+  const host = (url: string) => {
+    try {
+      return new URL(url).hostname;
+    } catch {
+      return url;
+    }
+  };
 
   return (
     <>
@@ -210,6 +222,58 @@ export default function SessionManager({ open, onClose }: SessionManagerProps) {
               </div>
               );
             })
+          )}
+
+          {/* ── Reading list (F6) ─────────────────────────────────── */}
+          {readingOn && (
+            <div className="pt-4 border-t border-hairline">
+              <div className="flex items-baseline justify-between mb-2">
+                <div className="label-mono">Reading list</div>
+                {readingEntries.length > 0 && (
+                  <span className="font-mono text-[10px] text-faint">
+                    {readingEntries.length}
+                  </span>
+                )}
+              </div>
+              {readingEntries.length === 0 ? (
+                <p className="text-xs text-faint">
+                  Pages you summarize &amp; close will land here.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {readingEntries.map((entry) => (
+                    <div
+                      key={entry.id}
+                      className="bg-surface rounded-xl p-3 border border-hairline group"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[13px] font-medium text-ink truncate">
+                            {entry.title}
+                          </p>
+                          <p className="text-[11px] text-faint font-mono truncate mt-0.5">
+                            {host(entry.url)} ·{" "}
+                            {format(entry.savedAt, "MMM d, h:mm a")}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => void removeEntry(entry.id)}
+                          aria-label="Remove from reading list"
+                          className="w-6 h-6 grid place-items-center rounded-[6px] text-faint opacity-0 group-hover:opacity-100 hover:text-[var(--status-unvisited)] transition-all"
+                        >
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                      <p className="text-[11px] text-muted leading-snug mt-1.5 line-clamp-2">
+                        {entry.summary}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
         </div>
       </aside>

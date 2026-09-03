@@ -16,10 +16,10 @@ Tabs are **objects, not records**. Every site you have open is a physical deck y
 - **Timeline view** — your tabs ordered by attention over time, with a safe "clear forgotten" cleanup for tabs you opened and never touched.
 - **Command palette (⌘K)** — search tabs, run actions, and trigger Workspaces from anywhere.
 - **Workspaces** — type a goal; Tab Mission proposes which tabs to keep and which to set aside, then snapshots them into a reversible workspace. One-click Undo.
-- **Session manager** — save, restore, and delete tab sets; windows are auto-saved when they close.
+- **Session manager** — save, restore, and delete tab sets; windows are auto-saved when they close. Includes the AI **reading list** of summarized pages.
 - **Usage analytics** — today's stats, top domains by time, 30-day trend, and a weekly report.
 - **Hibernate** — discard idle tabs to reclaim memory without closing them.
-- **Optional local AI** — "Refine with AI" and a tab chat powered by your **local Ollama** (`localhost:11434`). Off by default; core works fully without it.
+- **Optional local AI** — daily debriefs, tab-debt triage, proactive suggestions, session memory, semantic ⌘K search, summarize-and-close with a private reading list, a habits coach, and idle-time cleanup plans — all powered by your **local Ollama** (`localhost:11434`). Off by default; core works fully without it.
 
 ## Privacy
 
@@ -28,6 +28,7 @@ Tab Mission has **no backend, no telemetry, and no cloud**. Every byte of tab, s
 The **only** optional outbound connection is to a local Ollama instance, and it is never made until you opt in:
 
 - The `http://localhost/*` / `http://127.0.0.1/*` host permissions are **optional** (`optional_host_permissions`) — requested at opt-in time, revocable in chrome://extensions.
+- **Page reading is opt-in too.** "Summarize & close" reads only the page you click it on; the `scripting` permission + site access are requested when you enable "Read Pages for AI" in Settings and revoked when you turn it off.
 - The manifest CSP restricts network access to `localhost:11434` only.
 - Nothing is ever sent over the network by default.
 
