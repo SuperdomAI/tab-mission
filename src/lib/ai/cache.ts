@@ -63,6 +63,7 @@ export const TASK_TTL_MS: Record<string, number> = {
   coach: 6 * HOUR,
   triage: HOUR,
   suggestions: 30 * 60 * 1000,
+  queryIntent: 30 * 60 * 1000,
   sessionSummary: 30 * DAY,
   summarizePage: 7 * DAY,
   embed: DAY,
@@ -84,8 +85,8 @@ export class AiCache<T> {
 
   /**
    * Fresh entry for this task/signature/model, or `undefined` when missing,
-   * expired, or produced by a different model. Expired entries are dropped so
-   * the store never accumulates dead weight.
+   * expired, or produced by a different model. Expired and model-mismatched
+   * entries are dropped so the store never accumulates dead weight.
    */
   get(
     task: string,
@@ -96,8 +97,7 @@ export class AiCache<T> {
     const key = this.key(task, signature);
     const entry = this.store.get(key) as CacheEntry<T> | undefined;
     if (!entry) return undefined;
-    if (entry.model !== model) return undefined;
-    if (now - entry.generatedAt > this.ttlFor(task)) {
+    if (entry.model !== model || now - entry.generatedAt > this.ttlFor(task)) {
       this.store.delete(key);
       return undefined;
     }

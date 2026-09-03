@@ -55,6 +55,9 @@ export interface PageLite {
 /** Enforce the prompt-size budget from the plan (≤ ~40 tabs). */
 export const TRIAGE_TAB_CAP = 40;
 
+/** Truncate page content fed to the summarize prompt (F6). */
+export const PAGE_TEXT_CAP = 6000;
+
 function tabLine(t: { id: number; title: string; domain: string }): string {
   return `${t.id}: ${t.title} (${t.domain})`;
 }
@@ -87,8 +90,8 @@ export function buildDebriefPrompt(input: DebriefInput): string {
 // ─── F2 / F12 tab-debt triage ───────────────────────────────────────────────
 
 export function buildTriagePrompt(tabs: TriageTab[]): string {
-  const list = tabs
-    .slice(0, TRIAGE_TAB_CAP)
+  const capped = tabs.slice(0, TRIAGE_TAB_CAP);
+  const list = capped
     .map((t) => {
       const meta = [
         t.domain,
@@ -102,13 +105,14 @@ export function buildTriagePrompt(tabs: TriageTab[]): string {
     .join("\n");
   return [
     "You help someone clear tab debt. Classify each tab below as close or keep.",
-    `Tabs (${tabs.length}: id: title (domain) — meta):`,
+    `Tabs (${capped.length}): id: title (domain) — meta`,
     list,
     "",
     'category must be one of "duplicate" | "same-thread" | "stale" | "unvisited" | "junk".',
-    'Keep anything the person might still need; only recommend close with a concrete reason.',
+    "Keep anything the person might still need; only recommend close with a concrete reason.",
+    "tabId must be one of the ids listed above (never 0).",
     requireJson(
-      '{"items": [{"tabId": 0, "action": "close" | "keep", "reason": "short", "category": "stale"}]}',
+      '{"items": [{"tabId": 1, "action": "close" | "keep", "reason": "short", "category": "stale"}]}',
     ),
   ].join("\n");
 }
@@ -121,12 +125,13 @@ export function buildIdleDraftPrompt(tabs: TriageTab[]): string {
 // ─── F3 proactive workspace suggestions ─────────────────────────────────────
 
 export function buildSuggestionsPrompt(tabs: SuggestTab[]): string {
-  const list = tabs
+  const capped = tabs.slice(0, TRIAGE_TAB_CAP);
+  const list = capped
     .map((t) => `${tabLine(t)}${t.windowId !== undefined ? ` [window ${t.windowId}]` : ""}`)
     .join("\n");
   return [
     "Look at this person's open tabs and propose at most 2 groups that form a coherent task or project.",
-    `Open tabs (${tabs.length}):`,
+    `Open tabs (${capped.length}):`,
     list,
     "",
     "Rules: every tabId must come from the list above; prefer 3-12 tabs per group; one-word-ish goal names.",
@@ -161,7 +166,7 @@ export function buildSummarizePagePrompt(page: PageLite): string {
     "Give 3-5 bullets, ≤ 120 words total, and end with one line on why it mattered.",
     "",
     "Page content:",
-    page.text.slice(0, 6000),
+    page.text.slice(0, PAGE_TEXT_CAP),
     "",
     requireJson(
       '{"summary": "3-5 bullets, ≤120 words", "whyItMatters": "one line"}',

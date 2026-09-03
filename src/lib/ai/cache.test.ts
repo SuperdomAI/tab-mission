@@ -41,10 +41,12 @@ describe("AiCache", () => {
     expect(store.get(probe.key("triage", SIGNATURE))).toBeUndefined();
   });
 
-  it("rejects entries produced by a different model", () => {
-    const cache = new AiCache<string>();
+  it("rejects and drops entries produced by a different model", () => {
+    const store = new MemoryCacheStore();
+    const cache = new AiCache<string>(store);
     cache.set("embed", SIGNATURE, "x", "nomic-embed-text", NOW);
     expect(cache.get("embed", SIGNATURE, "other-model", NOW)).toBeUndefined();
+    expect(store.get(cache.key("embed", SIGNATURE))).toBeUndefined();
   });
 
   it("applies the fallback TTL for unknown tasks", () => {

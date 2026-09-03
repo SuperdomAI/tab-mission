@@ -18,9 +18,12 @@ describe("sha1Hex", () => {
     );
   });
 
-  it("handles multi-block (> 64 byte) and multibyte input", () => {
-    expect(sha1Hex("a".repeat(100))).toHaveLength(40);
-    expect(sha1Hex("é日本")).toHaveLength(40);
+  it("handles multi-block and multibyte input against reference vectors", () => {
+    expect(sha1Hex("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq")).toBe(
+      "84983e441c3bd26ebaae4aa1f95129e5e54670f1",
+    );
+    expect(sha1Hex("a".repeat(64))).toBe("0098ba824b5c16427bd7a1122a5a442a25ec644d");
+    expect(sha1Hex("é日本")).toBe("e55eeff7fe0866f8fe443dc5f88b41202db7015d");
   });
 
   it("is deterministic", () => {
@@ -63,11 +66,18 @@ describe("tabSetSignature", () => {
       tabSetSignature([tabs[0]]),
     );
   });
+
+  it("is injective when a title embeds the old delimiter", () => {
+    // Under a naive "|"-join these two sets were identical — "1|a|b|c" vs "1|a|b|c".
+    const a: TabSigInput = { id: 1, title: "a|b", url: "c" };
+    const b: TabSigInput = { id: 1, title: "a", url: "b|c" };
+    expect(tabSetSignature([a])).not.toBe(tabSetSignature([b]));
+  });
 });
 
 describe("analyticsSignature", () => {
   const days: DaySigInput[] = [
-    { date: "2026-09-01", opened: 5, closed: 2, peak: 40, debt: 60, domainTime: { "a.com": 100 } },
+    { date: "2026-09-01", opened: 5, closed: 2, peak: 40, debt: 60, domainTime: { "a.com": 100, "b.com": 50 } },
     { date: "2026-09-02", opened: 3, closed: 4, peak: 38, debt: 55, domainTime: {} },
   ];
 
@@ -80,12 +90,20 @@ describe("analyticsSignature", () => {
     expect(analyticsSignature(changed)).not.toBe(analyticsSignature(days));
   });
 
-  it("is stable across domainTime key ordering", () => {
-    const swapped = [
-      { ...days[0], domainTime: { "a.com": 100 } },
+  it("is stable across domainTime key insertion order", () => {
+    const swapped: DaySigInput[] = [
+      { ...days[0], domainTime: { "b.com": 50, "a.com": 100 } },
       days[1],
     ];
     expect(analyticsSignature(swapped)).toBe(analyticsSignature(days));
+  });
+
+  it("changes when a domain's time changes", () => {
+    const changed: DaySigInput[] = [
+      { ...days[0], domainTime: { "a.com": 99, "b.com": 50 } },
+      days[1],
+    ];
+    expect(analyticsSignature(changed)).not.toBe(analyticsSignature(days));
   });
 });
 

@@ -63,6 +63,15 @@ export interface AppSettings {
   aiIdleDrafts: boolean;
 }
 
+/**
+ * Merge stored settings over the defaults so settings added in later releases
+ * (e.g. the AI fields) are never `undefined` for users with older saved
+ * settings in `chrome.storage.sync`. `stored` is a full-or-partial object.
+ */
+export function mergeSettings(stored: Partial<AppSettings> | undefined): AppSettings {
+  return { ...DEFAULT_SETTINGS, ...stored };
+}
+
 export const DEFAULT_SETTINGS: AppSettings = {
   workDomains: [],
   zombieThresholdHours: 3,

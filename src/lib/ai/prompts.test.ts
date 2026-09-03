@@ -56,11 +56,24 @@ describe("buildTriagePrompt", () => {
     expect(p).toContain("1 visits");
   });
 
-  it("caps the tab list at TRIAGE_TAB_CAP", () => {
+  it("caps the tab list at TRIAGE_TAB_CAP and reports the listed count", () => {
     const p = buildTriagePrompt(many);
-    expect(p).toContain(`Tabs (${many.length}:`);
+    expect(p).toContain(`Tabs (${TRIAGE_TAB_CAP}):`);
     expect(p).toContain(`${TRIAGE_TAB_CAP}:`);
     expect(p).not.toContain(`${TRIAGE_TAB_CAP + 1}:`);
+  });
+
+  it("lists exactly 40 tabs at the boundary and 41+ is still capped", () => {
+    const exact = buildTriagePrompt(many.slice(0, 40));
+    const lineCount = (s: string) => s.split("\n").filter((l) => /^\d+: /.test(l)).length;
+    expect(lineCount(exact)).toBe(40);
+    expect(lineCount(buildTriagePrompt(many))).toBe(40);
+  });
+
+  it("forbids id 0 and demands ids from the list", () => {
+    const p = buildTriagePrompt([tab(1)]);
+    expect(p).toContain("tabId must be one of the ids listed above (never 0)");
+    expect(p).not.toContain('"tabId": 0');
   });
 
   it("offers the allowed category set", () => {
@@ -81,6 +94,14 @@ describe("buildSuggestionsPrompt", () => {
     expect(p).toContain("1: a (d) [window 3]");
     expect(p).toMatch(/at most 2 groups/);
     expect(p).toContain("tabIds");
+  });
+
+  it("caps the tab list at TRIAGE_TAB_CAP like triage", () => {
+    const p = buildSuggestionsPrompt(
+      Array.from({ length: 60 }, (_, i) => ({ id: i + 1, title: `t${i + 1}`, domain: "d" })),
+    );
+    expect(p).toContain(`Open tabs (${TRIAGE_TAB_CAP}):`);
+    expect(p).not.toContain(`${TRIAGE_TAB_CAP + 1}: t`);
   });
 });
 

@@ -113,18 +113,19 @@ export interface TabSigInput {
 /** Order-independent fingerprint of a tab set. */
 export function tabSetSignature(tabs: TabSigInput[]): string {
   const sorted = [...tabs].sort((a, b) => a.id - b.id);
-  const canon = sorted
-    .map((t) =>
-      [
-        t.id,
-        t.title,
-        t.url ?? "",
-        t.domain ?? "",
-        t.openedAt ?? 0,
-        t.visitCount ?? 0,
-      ].join("|"),
-    )
-    .join("\n");
+  // A length-prefixed JSON tuple per tab: injective (a title embedding "|" or
+  // "\n" can never collide with a shifted neighbor) yet still normalizes
+  // absent optional fields to the same value as explicit defaults.
+  const canon = JSON.stringify(
+    sorted.map((t) => [
+      t.id,
+      t.title,
+      t.url ?? "",
+      t.domain ?? "",
+      t.openedAt ?? 0,
+      t.visitCount ?? 0,
+    ]),
+  );
   return sha1Hex(canon);
 }
 
@@ -141,16 +142,13 @@ export interface DaySigInput {
 export function analyticsSignature(days: DaySigInput[]): string {
   const sorted = [...days].sort((a, b) => a.date.localeCompare(b.date));
   const canon = sorted
-    .map((d) =>
-      [
-        d.date,
-        d.opened,
-        d.closed,
-        d.peak,
-        d.debt,
-        JSON.stringify(d.domainTime ?? {}),
-      ].join("|"),
-    )
+    .map((d) => {
+      const domainTime = Object.entries(d.domainTime ?? {})
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([domain, ms]) => `${domain}=${ms}`)
+        .join(",");
+      return [d.date, d.opened, d.closed, d.peak, d.debt, domainTime].join("|");
+    })
     .join("\n");
   return sha1Hex(canon);
 }

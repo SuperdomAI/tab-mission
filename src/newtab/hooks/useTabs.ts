@@ -9,7 +9,7 @@ import type {
   Workspace,
   WorkspaceUndo,
 } from "../../types/index";
-import { DEFAULT_SETTINGS } from "../../types/index";
+import { mergeSettings } from "../../types/index";
 
 /**
  * Loads all data from chrome.storage.local on mount and subscribes to storage
@@ -57,9 +57,7 @@ export function useTabs() {
           if (result.viewMode === "stacks" || result.viewMode === "timeline") {
             hydrateViewMode(result.viewMode);
           }
-          setSettings(
-            (settingsResult.settings as AppSettings) || DEFAULT_SETTINGS,
-          );
+          setSettings(mergeSettings(settingsResult.settings as AppSettings));
           setLoading(false);
         });
       } catch (e) {
@@ -118,7 +116,7 @@ export function useTabs() {
       if (area === "sync") {
         startTransition(() => {
           if (changes.settings?.newValue !== undefined) {
-            setSettings(changes.settings.newValue as AppSettings);
+            setSettings(mergeSettings(changes.settings.newValue as AppSettings));
           }
         });
       }

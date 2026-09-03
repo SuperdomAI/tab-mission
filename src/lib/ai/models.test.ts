@@ -26,6 +26,8 @@ describe("recommendedProfile", () => {
     expect(DEFAULT_PROFILE.chat).toBe(DEFAULT_SETTINGS.aiChatModel);
     expect(DEFAULT_PROFILE.fast).toBe(DEFAULT_SETTINGS.aiFastModel);
     expect(DEFAULT_PROFILE.embed).toBe(DEFAULT_SETTINGS.aiEmbedModel);
+    // legacy single-model setting preserved for existing AskAI/Focus flows
+    expect(DEFAULT_SETTINGS.ollamaModel).toBe("llama3.2");
   });
 });
 
@@ -81,5 +83,10 @@ describe("isRecommendedModel / NUM_CTX", () => {
 
   it("keeps fast contexts small and chat contexts larger", () => {
     expect(NUM_CTX.fast).toBeLessThan(NUM_CTX.chat);
+  });
+
+  it("locks the plan's suggested context windows", () => {
+    expect(NUM_CTX.fast).toBe(4096);
+    expect(NUM_CTX.chat).toBe(8192);
   });
 });

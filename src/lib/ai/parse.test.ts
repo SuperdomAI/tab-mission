@@ -33,6 +33,18 @@ describe("extractJson", () => {
     expect(extractJson("the ids are [7, 8] for this")).toEqual([7, 8]);
   });
 
+  it("recovers a real object past an earlier unparseable bracket", () => {
+    expect(extractJson('Note [abc]: {"keep":[1,2]}')).toEqual({ keep: [1, 2] });
+    expect(extractJson('junk { unbalanced then [1,2]')).toEqual([1, 2]);
+  });
+
+  it("handles braces and escaped quotes inside strings", () => {
+    expect(extractJson('{"a":"}"}')).toEqual({ a: "}" });
+    expect(extractJson('{"a":"with \\"quotes\\" inside"}')).toEqual({
+      a: 'with "quotes" inside',
+    });
+  });
+
   it("ignores prose that merely mentions braces out of order", () => {
     expect(extractJson("no json here, just a } and { somewhere")).toBeNull();
   });
@@ -66,6 +78,10 @@ describe("extractField", () => {
 
   it("returns undefined when the key is absent", () => {
     expect(extractField('{"other":1}', "summary")).toBeUndefined();
+  });
+
+  it("does not return a raw string for a truncated non-string value", () => {
+    expect(extractField('sections: [1,[2]]', "sections")).toBeNull();
   });
 });
 
@@ -119,6 +135,11 @@ describe("coercers", () => {
     expect(coerceNumber(" 8 ")).toBe(8);
     expect(coerceNumber("nope")).toBeNull();
     expect(coerceNumber(null)).toBeNull();
+  });
+
+  it("coerceNumber rejects empty/whitespace strings (Number('') is 0)", () => {
+    expect(coerceNumber("")).toBeNull();
+    expect(coerceNumber("   ")).toBeNull();
   });
 
   it("coerceString trims and rejects empty", () => {

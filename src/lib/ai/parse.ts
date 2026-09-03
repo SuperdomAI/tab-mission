@@ -22,8 +22,9 @@ export function extractJson(text: string): unknown {
   const unfenced = tryParse(fenced);
   if (unfenced !== undefined) return unfenced;
 
-  const block = firstBalancedBlock(fenced);
-  if (block !== null) {
+  // Walk candidate blocks left-to-right: an earlier `[1]` before the real
+  // `{…}` must not shadow it.
+  for (const block of balancedBlocks(fenced)) {
     const parsed = tryParse(block);
     if (parsed !== undefined) return parsed;
   }
@@ -44,7 +45,9 @@ export function extractField(
   const m = new RegExp(`(?:"${key}"|${key})\\s*[:=]\\s*(?:"((?:[^"\\\\]|\\\\.)*)"|(\\[[^\\]]*\\]|\\{[^}]*\\}|\\d+))`, "i").exec(text);
   if (m) {
     if (m[1] !== undefined) return m[1].replace(/\\(["\\/bfnrt]|u[0-9a-fA-F]{4})/g, "$1");
-    return tryParse(m[2] ?? "") ?? m[2] ?? null;
+    // Non-string capture: must actually parse (handles "42", rejects a
+    // truncated "[1,[2]" which would otherwise surface as a raw string).
+    return tryParse(m[2] ?? "") ?? null;
   }
   return undefined;
 }
@@ -94,7 +97,9 @@ export function parseList<T>(
 export function coerceNumber(v: unknown): number | null {
   if (typeof v === "number" && Number.isFinite(v)) return v;
   if (typeof v === "string") {
-    const n = Number(v.trim());
+    const t = v.trim();
+    if (t === "") return null; // Number("") is 0 — a bogus id
+    const n = Number(t);
     if (Number.isFinite(n)) return n;
   }
   return null;
@@ -125,9 +130,8 @@ function tryParse(text: string): unknown {
   }
 }
 
-function firstBalancedBlock(text: string): string | null {
-  const start = findOpenIndex(text);
-  if (start === -1) return null;
+/** The balanced `{…}` / `[…]` block starting exactly at `start`, or null. */
+function firstBalancedBlockFrom(text: string, start: number): string | null {
   const openChar = text[start];
   const closeChar = openChar === "{" ? "}" : "]";
   let depth = 0;
@@ -158,10 +162,23 @@ function firstBalancedBlock(text: string): string | null {
   return null;
 }
 
-function findOpenIndex(text: string): number {
-  const brace = text.indexOf("{");
-  const bracket = text.indexOf("[");
-  if (brace === -1) return bracket;
-  if (bracket === -1) return brace;
-  return Math.min(brace, bracket);
+/**
+ * Every balanced `{…}` / `[…]` block in the text, left to right, deduped.
+ * Unclosed openers (prose with a stray brace) are skipped, so a later valid
+ * block is still found.
+ */
+function balancedBlocks(text: string): string[] {
+  const blocks: string[] = [];
+  const seen = new Set<string>();
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (ch !== "{" && ch !== "[") continue;
+    const block = firstBalancedBlockFrom(text, i);
+    if (block === null) continue;
+    if (!seen.has(block)) {
+      seen.add(block);
+      blocks.push(block);
+    }
+  }
+  return blocks;
 }
