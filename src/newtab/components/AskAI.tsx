@@ -197,7 +197,10 @@ const system = useCallback(
 
   /** New chat — clear the thread (and the model's context window). */
   function newChat() {
-    chatResetRef.current = true;
+    // Arm the abort-swallow ONLY when there is an in-flight stream to abort.
+    // Otherwise a later real error (Ollama down, missing model) must still
+    // surface — a stale flag would silently eat it.
+    chatResetRef.current = ctrlRef.current !== null;
     ctrlRef.current?.abort();
     setMessages([]);
     setDraft("");

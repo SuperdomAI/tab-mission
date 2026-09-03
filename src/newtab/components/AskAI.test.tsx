@@ -466,6 +466,25 @@ describe("AskAI sidebar", () => {
     ).toBeInTheDocument();
   });
 
+  it("surfaces the next error after a New chat that had nothing streaming", async () => {
+    renderAskAI();
+    await sendMessage("hi");
+    const port = await waitForPort(0);
+    driveStream(port, [{ message: { content: "Hello!" } }]);
+    await waitFor(() => expect(screen.getByText("Hello!")).toBeInTheDocument());
+
+    // New chat with no stream in flight must NOT arm the abort-swallow
+    // flag — a later real error (Ollama down, 404) still has to surface.
+    fireEvent.click(screen.getByRole("button", { name: "New chat" }));
+
+    await sendMessage("hello again");
+    const port2 = await waitForPort(1);
+    listenerOf(port2)({ type: "error", message: "fetch failed" });
+    await waitFor(() =>
+      expect(screen.getByText(/couldn't reach the model/i)).toBeInTheDocument(),
+    );
+  });
+
   it("executes a jumpTab tool call — activates the existing tab, no new tab", async () => {
     useTabStore.setState({
       tabs: [makeTab({ id: 1, title: "Inbox", domain: "mail.google.com", windowId: 7 })],
