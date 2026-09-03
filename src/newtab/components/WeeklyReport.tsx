@@ -200,7 +200,7 @@ export default function WeeklyReport({ open, onClose }: WeeklyReportProps) {
           <section>
             <h3 className="label-mono mb-3">Daily Top Domains</h3>
             <div className="space-y-3">
-              {week.map((day) => {
+              {[...week].reverse().map((day) => {
                 const top3 = topDomains(day.domainTime, 3);
                 if (top3.length === 0) return null;
                 return (
