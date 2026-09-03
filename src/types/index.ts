@@ -1,3 +1,5 @@
+import { DEFAULT_PROFILE } from "../lib/ai/models";
+
 export interface EnrichedTab {
   id: number;
   windowId: number;
@@ -45,6 +47,29 @@ export interface AppSettings {
   /** Optional local-AI assist via Ollama (off by default, fully optional). */
   ollamaEnabled: boolean;
   ollamaModel: string;
+  /** Model per task tier (see `src/lib/ai/models.ts` for recommendations). */
+  aiFastModel: string;
+  aiChatModel: string;
+  aiEmbedModel: string;
+  /** Gates F6/F7 page reading; requests `scripting` + host grants on first enable. */
+  aiPageReadingEnabled: boolean;
+  /** Per-feature toggles — default ON once the AI Assist master is on. */
+  aiDebrief: boolean;
+  aiTriage: boolean;
+  aiSuggestions: boolean;
+  aiSessionMemory: boolean;
+  aiSemanticSearch: boolean;
+  aiCoach: boolean;
+  aiIdleDrafts: boolean;
+}
+
+/**
+ * Merge stored settings over the defaults so settings added in later releases
+ * (e.g. the AI fields) are never `undefined` for users with older saved
+ * settings in `chrome.storage.sync`. `stored` is a full-or-partial object.
+ */
+export function mergeSettings(stored: Partial<AppSettings> | undefined): AppSettings {
+  return { ...DEFAULT_SETTINGS, ...stored };
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -56,6 +81,17 @@ export const DEFAULT_SETTINGS: AppSettings = {
   theme: "dark",
   ollamaEnabled: false,
   ollamaModel: "llama3.2",
+  aiFastModel: DEFAULT_PROFILE.fast,
+  aiChatModel: DEFAULT_PROFILE.chat,
+  aiEmbedModel: DEFAULT_PROFILE.embed,
+  aiPageReadingEnabled: false,
+  aiDebrief: true,
+  aiTriage: true,
+  aiSuggestions: true,
+  aiSessionMemory: true,
+  aiSemanticSearch: true,
+  aiCoach: true,
+  aiIdleDrafts: true,
 };
 
 /**

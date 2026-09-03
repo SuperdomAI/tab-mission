@@ -2,6 +2,18 @@
 
 All notable changes to Tab Mission are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Shared AI infrastructure** (`src/lib/ai/`, stage A of `docs/AI-FEATURES-PLAN.md`): a model registry with per-RAM recommendations (`models.ts`), a content-addressed result cache keyed by `sha1(task + input signature)` with per-task TTLs (`cache.ts`), tab-set/analytics fingerprints so cached results invalidate only on real change (`signatures.ts`), strict JSON extraction with fallbacks (`parse.ts`), prompt builders for all eight planned AI features (`prompts.ts`), and embedding math — cosine similarity, top-k, semantic+Fuse merge (`embed.ts`).
+- **`AppSettings` AI fields:** per-tier model choices (`aiFastModel` / `aiChatModel` / `aiEmbedModel`, defaulting to the 16 GB recommended stack), a page-reading gate (`aiPageReadingEnabled`, off by default), and per-feature toggles (`aiDebrief`, `aiTriage`, `aiSuggestions`, `aiSessionMemory`, `aiSemanticSearch`, `aiCoach`, `aiIdleDrafts`), all default ON when the existing AI master toggle is on. No new required permissions.
+- **Ollama transport:** `bgFetch` is now exported for service-worker reuse and a `/api/embed` batch-embedding call was added (`src/lib/ollama.ts`).
+
+### Fixed
+
+- **New AI settings no longer come back `undefined` for existing users.** Stored settings are now merged over `DEFAULT_SETTINGS` (`mergeSettings` in `src/types/index.ts`, applied at load and on change in `useTabs.ts`) so the new `ai*` fields resolve to their defaults until saved.
+
 ## [1.2.0] - 2026-09-03
 
 ### Fixed

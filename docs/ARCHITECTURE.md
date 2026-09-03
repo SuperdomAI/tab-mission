@@ -104,6 +104,19 @@ interface AppSettings {
   unvisitedAutoCloseMinutes: number; // default 30
   tabLimitWarning: number; // default 30
   theme: "dark" | "light"; // default "dark"
+  ollamaEnabled: boolean; // default false — AI Assist master toggle
+  ollamaModel: string; // legacy single-model choice (AskAI/Focus)
+  aiFastModel: string; // classification/triage tier — default qwen2.5:3b-instruct-q4_K_M
+  aiChatModel: string; // summaries/reports tier — default qwen2.5:7b-instruct-q4_K_M
+  aiEmbedModel: string; // semantic search tier — default nomic-embed-text
+  aiPageReadingEnabled: boolean; // default false — gates F6/F7 page reading (optional perms)
+  aiDebrief: boolean; // default true (all per-feature toggles default ON with the master)
+  aiTriage: boolean;
+  aiSuggestions: boolean;
+  aiSessionMemory: boolean;
+  aiSemanticSearch: boolean;
+  aiCoach: boolean;
+  aiIdleDrafts: boolean;
 }
 ```
 
@@ -261,6 +274,19 @@ Store updates that flow from `chrome.storage.onChanged` are wrapped in `startTra
 | `analytics` | `local` | `DailyAnalytics[]` | Last 30 days     |
 | `sessions`  | `local` | `SavedSession[]`   | Last 50 sessions |
 | `settings`  | `sync`  | `AppSettings`      | Single object    |
+
+### AI cache keys (planned — stages B–F of `docs/AI-FEATURES-PLAN.md`)
+
+All AI artifacts are **derived, regenerable caches** under `chrome.storage.local` (same precedent as `workspaces`, which is deliberately UI-owned). None landed yet; the shared primitives that will back them (`src/lib/ai/`) are in place:
+
+| Key | Contents |
+| --- | --- |
+| `aiReports` | `{ [date]: { summary, sections, generatedAt, model } }` — daily debrief + weekly coach |
+| `aiTriagePlan` | `{ signature, items, generatedAt, source: "on-demand" \| "idle" }` |
+| `aiSessionSummaries` | `{ [sessionId]: { summary, generatedAt, model } }` |
+| `aiSuggestions` | `{ signature, items, dismissed }` |
+| `aiReadingList` | capped at 100 entries (F6) |
+| `aiTabEmbeddings` | `{ model, dims, vectors: { [tabId]: number[] } }` — re-embedded when `model` changes |
 
 ---
 
