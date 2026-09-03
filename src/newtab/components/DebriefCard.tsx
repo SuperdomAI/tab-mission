@@ -72,6 +72,13 @@ export default function DebriefCard({ open }: { open: boolean }) {
     // `generate` is recreated per render; the guard above keeps it single-fire.
   }, [open, report, input, settings.ollamaEnabled, settings.aiDebrief, status]);
 
+  // A previous failure must not block auto-generation for a new day or a
+  // fresh drawer open (Ollama may have come back) — reset on both.
+  useEffect(() => {
+    setStatus("idle");
+    setError("");
+  }, [id, open]);
+
   if (!settings.ollamaEnabled || !settings.aiDebrief) return null;
 
   const busy = status === "generating";

@@ -76,6 +76,13 @@ export default function CoachCard({ open }: { open: boolean }) {
     }
   }, [open, report, hasData, settings.ollamaEnabled, settings.aiCoach, status]);
 
+  // A previous failure must not block auto-generation for a new week or a
+  // fresh drawer open (Ollama may have come back) — reset on both.
+  useEffect(() => {
+    setStatus("idle");
+    setError("");
+  }, [id, open]);
+
   if (!settings.ollamaEnabled || !settings.aiCoach) return null;
 
   const busy = status === "generating";
