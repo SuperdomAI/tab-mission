@@ -33,10 +33,10 @@ export const RECOMMENDATIONS: ModelRecommendation[] = [
     ram: 16,
     profile: {
       fast: "qwen2.5:3b-instruct-q4_K_M",
-      chat: "qwen2.5:7b-instruct-q4_K_M",
+      chat: "qwen3:8b",
       embed: "nomic-embed-text",
     },
-    hint: "qwen2.5 7B (chat) + 3B (fast) + nomic-embed-text — fits comfortably on 16 GB.",
+    hint: "qwen3 8B (chat, native tool calling) + qwen2.5 3B (fast) + nomic-embed-text — fits comfortably on 16 GB.",
   },
   {
     ram: 8,

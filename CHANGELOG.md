@@ -2,6 +2,19 @@
 
 All notable changes to Tab Mission are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Chat tier upgraded to `qwen3:8b`** — the 16 GB recommended chat model is now Qwen3 8B (native tool calling, ~5.2 GB Q4_K_M, Apache-2.0), replacing `qwen2.5:7b-instruct-q4_K_M` as the default `aiChatModel`. Ask AI streams send `think: false` so Qwen3's thinking mode (latency-only for the tab chat, no-op for other models) stays off. The 8 GB fallback tier (gemma3 4B) is unchanged.
+
+- **Ask AI sidebar** — "Ask AI" is now a prominent header button (accent pill, right of the view switcher) opening a right-side chat sidebar (docs-site style, `drawer-panel` grammar). Replaces the old ⌘K-only modal chat; the ⌘K entry stays.
+- **Streaming chat transport** — the page streams `/api/chat` through a new `ollama-stream` runtime port: the service worker proxies the fetch and forwards each NDJSON line (`streamOllamaFetch`), the client parses deltas into live text + tool calls (`streamChat`). An open port keeps the MV3 worker alive for the duration of the stream; Stop aborts it.
+- **Tool calling — "close this tab"** — the model can emit a `closeTab` tool call, identifying tabs by their **exact title** (names, never numeric ids — the tab list is passed without ids and the prompt tells the model to just act, not explain). "AI proposes, the UI executes": every call is validated by `resolveCloseTarget` (`src/lib/ai/chatTools.ts`) against the live tab store — pinned tabs are reported and skipped, unmatched/missing titles are refused, never closed; duplicate titles are closed in one batched `chrome.tabs.remove` — then executed via `useTabActions.closeMany`, reported back as a `tool` message for the model's confirmation, and an Undo toast (reopens the tab) fires in App. Tool cards show the human title, not raw JSON. Models without tool support degrade to text-only advice (single retry without tools; the thread shows a note).
+- **Reply hygiene** — the Ask AI system prompt now demands ≤2 sentences, no markdown/code blocks, no re-listing of the open tabs, and silent tool calls with a one-sentence confirmation; a render-layer safety net (`src/lib/ai/chatText.ts`) strips any fenced code blocks / inline backticks that small models (mistral) stream anyway, so the thread never shows raw ``` blocks.
+- **Text-claim fallback chips** — weak models sometimes *narrate* a close ("Close the 'Outlook …' tab.") without ever emitting a tool call. The UI now detects validated close-claims in the assistant's text (`detectCloseProposals` in `chatTools.ts`: quoted + plain mentions, exact-title match with a trailing "(domain)" candidate, pinned never proposed) and renders them as actionable "Close · Outlook" chips — the user clicks, the UI re-validates and executes via `closeMany`. Text alone never auto-closes anything. The prompt also now states that claiming "Closed …" without calling the tool is a lie.
+- **Tests (+28 → 344):** `streamChat`/`streamOllamaFetch` coverage added to `ollama.test.ts` (deltas, tool calls, abort, tools-unsupported retry vs. plain-failure no-retry), NEW `chatTools.test.ts` (schema + all refusal paths), NEW `chatText.test.ts` (fence/inline-backtick stripping), NEW `AskAI.test.tsx` (off state, streaming thread, closeTab execution + confirmation turn, duplicate-title batched close, pinned refusal, unreachable/404 hints, Stop, suggestion chips, fence-stripped replies). `chrome-mock` gained `runtime.connect`/`onConnect` + a controllable fake port.
+
 ## [1.3.0] - 2026-09-03
 
 ### Added

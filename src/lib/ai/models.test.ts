@@ -33,10 +33,10 @@ describe("recommendedProfile", () => {
 });
 
 describe("resolveModel", () => {
-  const installed = ["qwen2.5:7b-instruct-q4_K_M", "qwen2.5:3b-instruct-q4_K_M"];
+  const installed = ["qwen3:8b", "qwen2.5:3b-instruct-q4_K_M"];
 
   it("prefers the RAM-tier recommended model when installed", () => {
-    expect(resolveModel("chat", installed, 16)).toBe("qwen2.5:7b-instruct-q4_K_M");
+    expect(resolveModel("chat", installed, 16)).toBe("qwen3:8b");
     expect(resolveModel("fast", installed, 16)).toBe("qwen2.5:3b-instruct-q4_K_M");
   });
 

@@ -107,7 +107,7 @@ interface AppSettings {
   ollamaEnabled: boolean; // default false — AI Assist master toggle
   ollamaModel: string; // legacy single-model choice (AskAI/Focus)
   aiFastModel: string; // classification/triage tier — default qwen2.5:3b-instruct-q4_K_M
-  aiChatModel: string; // summaries/reports tier — default qwen2.5:7b-instruct-q4_K_M
+  aiChatModel: string; // summaries/reports tier — default qwen3:8b
   aiEmbedModel: string; // semantic search tier — default nomic-embed-text
   aiPageReadingEnabled: boolean; // default false — gates F6/F7 page reading (optional perms)
   aiDebrief: boolean; // default true (all per-feature toggles default ON with the master)
@@ -144,6 +144,8 @@ Re-registers all event listeners at top level on every startup (MV3 service work
 | `chrome.windows.onRemoved`                | Auto-save that window's tabs as a `SavedSession` (`"Auto-save: [date]"`) |
 | `chrome.idle.onStateChanged`              | Pause time accumulation when idle/locked (60s detection interval); on `"idle"`, fire-and-forget an F12 triage draft (Ollama on + `aiTriage`/`aiIdleDrafts` on + ≥ 8 tabs + tab-set signature changed since the last draft) |
 | `chrome.alarms.onAlarm` (peakTabSnapshot) | Fires every 60s — queries live tab count, updates `peakTabCount` + `tabDebtScore` |
+| `chrome.runtime.onMessage` (`ollama-fetch`) | Ollama CORS proxy: page-originated `bgFetch` calls are re-fetched here (no web origin → Ollama's CORS gate passes); returns the full text body |
+| `chrome.runtime.onConnect` (`ollama-stream`) | Ask AI sidebar streaming proxy: forwards each NDJSON line of a streamed `/api/chat` response back to the port (via `streamOllamaFetch`); an open port keeps the MV3 worker alive for the duration of the stream |
 
 ### Time tracking state machine
 
@@ -271,6 +273,7 @@ Store updates that flow from `chrome.storage.onChanged` are wrapped in `startTra
 | `TabRow`            | `tab, onJump, onClose, onSummarizeClose?` | `settings`   | — (summarize-close goes through `useReadingList`)              |
 | `SuggestionsStrip`  | `onFocus`          | `tabs, settings` + `useSuggestions` | `storage.local` write (`aiSuggestions`), Ollama via `bgFetch` |
 | `CommandPalette`    | `onFocus, onOpenWorkspaces, onAskAI` | `tabs, settings, sessions` + `useSessionSummaries` + `useTabEmbeddings` | `windows.create` (session restore), `tabs.update`, `windows.update`, `tabs.remove`, `tabs.discard`; `storage.local` write (`aiTabEmbeddings`), Ollama via `bgFetch` (embeddings) |
+| `AskAI` (sidebar)   | `open, onClose, onOpenSettings, onClosed` | `tabs, settings` + `useTabActions` | Ollama via the `ollama-stream` port (`streamChat`); `tabs.remove` ONLY through validated `closeTab` tool calls (`resolveCloseTarget` — pinned/unknown tabs are never closed); reopen on Undo via `tabs.create` (App toast) |
 | `Tooltip`            | `text, position?, align?` | —                    | —                                                              |
 
 ---
@@ -440,6 +443,6 @@ Implemented in `BulkActions.tsx`. Button counts and the zombie threshold both re
 
 - **Icon artwork** — current icons are placeholder squares; replace before store submission
 - **`unvisitedAutoCloseEnabled`** — setting exists, background auto-close wiring not yet implemented
-- **No tests** — no Vitest or `@testing-library/react` setup yet
 - **WindowGroup view** — alternative grouping by window (not domain) not yet built
 - **Tab tagging** — `EnrichedTab.tags` renders as chips but has no add/edit UI
+- **Ask AI chat** — conversation history is in-memory (lost when the new-tab page reloads), and the tool set is `closeTab`-only (hibernate/group tools are a natural extension); token-level streaming works through the SW port, but there is no AI-Elements-style part rendering yet
