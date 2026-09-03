@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import ReactDOM from "react-dom";
 import { useTabStore } from "../../store/tabStore";
 import { useTabActions } from "../hooks/useTabActions";
 import {
@@ -59,9 +60,54 @@ export default function AskAI({ open, onClose, onOpenSettings, onClosed }: AskAI
   const [pendingText, setPendingText] = useState("");
   const [toolsOff, setToolsOff] = useState(false);
   const [proposals, setProposals] = useState<CloseProposal[]>([]);
+  const [suggestionsOpen, setSuggestionsOpen] = useState(false);
   const ctrlRef = useRef<AbortController | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const suggestBtnRef = useRef<HTMLButtonElement>(null);
+  const suggestPopRef = useRef<HTMLDivElement>(null);
+  const openTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearSuggestTimers = useCallback(() => {
+    if (openTimer.current) clearTimeout(openTimer.current);
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    openTimer.current = closeTimer.current = null;
+  }, []);
+
+  const openSuggestions = useCallback(() => {
+    clearSuggestTimers();
+    setSuggestionsOpen(true);
+  }, [clearSuggestTimers]);
+
+  /** Hover opens after a short grace so passing the mouse doesn't flash it. */
+  const scheduleOpen = useCallback(() => {
+    clearSuggestTimers();
+    openTimer.current = setTimeout(openSuggestions, 150);
+  }, [clearSuggestTimers, openSuggestions]);
+
+  const scheduleClose = useCallback(() => {
+    clearSuggestTimers();
+    closeTimer.current = setTimeout(() => setSuggestionsOpen(false), 200);
+  }, [clearSuggestTimers]);
+
+  // Close when the sidebar closes and clean up timers on unmount.
+  useEffect(() => {
+    if (!open) setSuggestionsOpen(false);
+    return () => clearSuggestTimers();
+  }, [open, clearSuggestTimers]);
+
+  // Click anywhere outside the button/menu closes it.
+  useEffect(() => {
+    if (!suggestionsOpen) return;
+    function onPointerDown(e: PointerEvent) {
+      const t = e.target as Node;
+      if (suggestBtnRef.current?.contains(t) || suggestPopRef.current?.contains(t)) return;
+      setSuggestionsOpen(false);
+    }
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [suggestionsOpen]);
 
   // Esc closes the sidebar.
   useEffect(() => {
@@ -297,6 +343,12 @@ const system = useCallback(
             </div>
           ) : (
             <>
+              {messages.length === 0 && (
+                <p className="text-[13px] text-faint">
+                  Ask about your open tabs, or let me close some for you.
+                </p>
+              )}
+
               {messages.map((m, i) => (
                 <MessageBubble key={i} msg={m} />
               ))}
@@ -340,30 +392,6 @@ const system = useCallback(
                   ))}
                 </div>
               )}
-
-              {/* Suggestions stay available through the conversation — the
-                  empty-state intro becomes a label once messages exist.
-                  Hidden while streaming so the thread doesn't shift. */}
-              {!streaming && (
-                <div className="space-y-3">
-                  {messages.length === 0 ? (
-                    <p className="text-[13px] text-faint">
-                      Ask about your open tabs, or let me close some for you.
-                    </p>
-                  ) : (
-                    <p className="label-mono">More you can ask</p>
-                  )}
-                  {SUGGESTIONS.map((s) => (
-                    <button
-                      key={s}
-                      onClick={() => send(s)}
-                      className="block w-full text-left text-[12px] text-muted bg-white/[0.04] border border-border rounded-[9px] px-3.5 py-2.5 hover:text-ink hover:bg-white/[0.07] transition-colors"
-                    >
-                      “{s}”
-                    </button>
-                  ))}
-                </div>
-              )}
             </>
           )}
         </div>
@@ -371,6 +399,23 @@ const system = useCallback(
         {/* Input */}
         {!aiOff && (
           <div className="p-4 border-t border-hairline flex gap-2">
+            <button
+              ref={suggestBtnRef}
+              onClick={() =>
+                suggestionsOpen ? setSuggestionsOpen(false) : openSuggestions()
+              }
+              onMouseEnter={scheduleOpen}
+              onMouseLeave={scheduleClose}
+              aria-label="Ask a suggested question"
+              aria-expanded={suggestionsOpen}
+              className={`w-8 h-8 shrink-0 grid place-items-center rounded-[9px] font-mono text-[13px] border transition-colors ${
+                suggestionsOpen
+                  ? "text-ink border-accent/50 bg-white/[0.06]"
+                  : "text-faint hover:text-ink border-border hover:bg-white/[0.04]"
+              }`}
+            >
+              ?
+            </button>
             <input
               ref={inputRef}
               value={draft}
@@ -397,9 +442,53 @@ const system = useCallback(
             )}
           </div>
         )}
+
+        {suggestionsOpen && suggestBtnRef.current &&
+          ReactDOM.createPortal(
+            <div
+              ref={suggestPopRef}
+              onMouseEnter={openSuggestions}
+              onMouseLeave={scheduleClose}
+              role="menu"
+              aria-label="Suggested questions"
+              style={suggestPopoverStyle(suggestBtnRef.current.getBoundingClientRect())}
+              className="animate-fade-in bg-popover border border-hairline rounded-[14px] shadow-[0_40px_100px_-30px_#000] p-2 w-[280px]"
+            >
+              <p className="label-mono px-2.5 pt-1.5 pb-1">Try asking</p>
+              {SUGGESTIONS.map((s) => (
+                <button
+                  key={s}
+                  role="menuitem"
+                  onClick={() => {
+                    setSuggestionsOpen(false);
+                    send(s);
+                  }}
+                  className="block w-full text-left text-[12px] text-muted hover:text-ink hover:bg-white/[0.07] rounded-[8px] px-2.5 py-2 transition-colors"
+                >
+                  {s}
+                </button>
+              ))}
+            </div>,
+            document.body,
+          )}
       </aside>
     </>
   );
+}
+
+/** Position the suggestion menu above the "?" button (below when cramped). */
+function suggestPopoverStyle(rect: DOMRect): React.CSSProperties {
+  const width = 280;
+  const gap = 8;
+  const above = rect.top >= 280;
+  return {
+    position: "fixed",
+    zIndex: 99999,
+    width,
+    left: Math.min(rect.left, window.innerWidth - width - 12),
+    top: above ? rect.top - gap : rect.bottom + gap,
+    transform: above ? "translateY(-100%)" : undefined,
+  };
 }
 
 /** One conversation row: user bubble, assistant bubble, or a tool-call card. */

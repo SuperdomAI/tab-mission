@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import AskAI from "./AskAI";
 import { useTabStore } from "../../store/tabStore";
 import { makeTab } from "../../test/factory";
@@ -266,9 +266,15 @@ describe("AskAI sidebar", () => {
     await waitFor(() => expect(screen.getByText("Stopped.")).toBeInTheDocument());
   });
 
-  it("suggestion chips auto-submit on click (no Send needed)", async () => {
+  it("? button opens the suggestion menu on click; picking one auto-submits", async () => {
     renderAskAI();
-    fireEvent.click(screen.getByText(/Which tabs can I safely close/));
+    const suggestBtn = screen.getByRole("button", { name: "Ask a suggested question" });
+    expect(suggestBtn).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(suggestBtn);
+    expect(suggestBtn).toHaveAttribute("aria-expanded", "true");
+
+    const menu = screen.getByRole("menu", { name: "Suggested questions" });
+    fireEvent.click(within(menu).getByText(/Which tabs can I safely close/));
     // the suggestion was sent immediately: a stream port opened and the
     // user bubble rendered — no Send click, no draft to submit
     await waitFor(() =>
@@ -278,36 +284,35 @@ describe("AskAI sidebar", () => {
     expect(
       (screen.getByPlaceholderText("Ask about your tabs…") as HTMLInputElement).value,
     ).toBe("");
+    // menu closed after picking
+    expect(screen.queryByRole("menu", { name: "Suggested questions" })).toBeNull();
   });
 
-  it("keeps the suggestion chips visible after a question — with a label once the chat started", async () => {
+  it("? button opens the menu on hover and it closes on outside pointerdown", async () => {
+    renderAskAI();
+    const suggestBtn = screen.getByRole("button", { name: "Ask a suggested question" });
+    fireEvent.mouseEnter(suggestBtn);
+    await waitFor(() =>
+      expect(screen.getByRole("menu", { name: "Suggested questions" })).toBeInTheDocument(),
+    );
+    fireEvent.pointerDown(document.body);
+    expect(screen.queryByRole("menu", { name: "Suggested questions" })).toBeNull();
+  });
+
+  it("suggestion menu is available mid-conversation and closes after sending", async () => {
     renderAskAI();
     await sendMessage("hi");
     const port = await waitForPort(0);
-    // while streaming the chips are hidden so the thread doesn't shift
-    expect(screen.queryByText(/Which tabs can I safely close/)).toBeNull();
-
-    driveStream(port, [{ message: { content: "Hello!" } }]);
-    await waitFor(() => expect(screen.getByText("Hello!")).toBeInTheDocument());
-    expect(screen.getByText("More you can ask")).toBeInTheDocument();
-    expect(screen.getByText(/Which tabs can I safely close/)).toBeInTheDocument();
-  });
-
-  it("suggestion chips stay clickable mid-conversation (auto-submit a second question)", async () => {
-    renderAskAI();
-    await sendMessage("hi");
-    const port = await waitForPort(0);
     driveStream(port, [{ message: { content: "Hello!" } }]);
     await waitFor(() => expect(screen.getByText("Hello!")).toBeInTheDocument());
 
-    fireEvent.click(screen.getByText(/Which tabs can I safely close/));
+    fireEvent.click(screen.getByRole("button", { name: "Ask a suggested question" }));
+    const menu = screen.getByRole("menu", { name: "Suggested questions" });
+    fireEvent.click(within(menu).getByText(/Which tabs can I safely close/));
     await waitFor(() =>
       expect(chromeMock().runtime.connect).toHaveBeenCalledTimes(2),
     );
-    // the second user bubble appears without a Send click
     expect(screen.getByText("Which tabs can I safely close?")).toBeInTheDocument();
-    expect(
-      (screen.getByPlaceholderText("Ask about your tabs…") as HTMLInputElement).value,
-    ).toBe("");
+    expect(screen.queryByRole("menu", { name: "Suggested questions" })).toBeNull();
   });
 });
